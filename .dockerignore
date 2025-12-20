@@ -1,0 +1,35 @@
+# Git
+.git
+.gitignore
+
+# Documentation
+*.md
+ARCHITECTURE.txt
+LICENSE
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info
+
+# IDE
+.vscode
+.idea
+*.swp
+
+# Local data
+downloads/
+chrome-data/
+logs/
+*.mp4
+*.ts
+
+# Docker
+docker-compose.override.yml
+
+# Environment
+.env
+.env.local

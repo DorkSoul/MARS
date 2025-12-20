@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MARS - Media Archive Recording System</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <h1>🎬 MARS</h1>
+            <p>Media Archive Recording System - Intelligent stream recording and archiving</p>
+        </header>
+
+        <div class="main-content">
+            <!-- Direct Download Mode -->
+            <div class="card">
+                <h2><span class="icon">⚡</span> Direct Download</h2>
+                <p>Download directly from a known stream URL (.m3u8, .mpd, .mp4)</p>
+
+                <div class="input-group">
+                    <label for="direct-url">Stream URL</label>
+                    <input type="text" id="direct-url" placeholder="https://example.com/stream.m3u8" required>
+                </div>
+
+                <div class="input-group">
+                    <label for="direct-filename">Filename (optional)</label>
+                    <input type="text" id="direct-filename"
+                        placeholder="video_name (leave empty for auto-generated name)">
+                    <div class="filename-error" id="direct-filename-error">A file with this name already exists</div>
+                </div>
+
+                <div class="input-group">
+                    <label for="direct-format">Output Format</label>
+                    <select id="direct-format">
+                        <optgroup label="Video Formats">
+                            <option value="mp4">MP4 (recommended)</option>
+                            <option value="mkv">MKV</option>
+                            <option value="webm">WebM</option>
+                            <option value="avi">AVI</option>
+                            <option value="mov">MOV</option>
+                            <option value="ts">TS (Transport Stream)</option>
+                            <option value="flv">FLV</option>
+                            <option value="wmv">WMV</option>
+                            <option value="m4v">M4V</option>
+                        </optgroup>
+                        <optgroup label="Audio Only">
+                            <option value="mp3">MP3</option>
+                            <option value="aac">AAC</option>
+                            <option value="m4a">M4A</option>
+                            <option value="flac">FLAC</option>
+                            <option value="wav">WAV</option>
+                            <option value="ogg">OGG</option>
+                            <option value="opus">OPUS</option>
+                            <option value="wma">WMA</option>
+                        </optgroup>
+                    </select>
+                </div>
+
+                <button class="btn" id="direct-download-btn" onclick="startDirectDownload()">
+                    Download Now
+                </button>
+
+                <div class="status-box" id="direct-status"></div>
+            </div>
+
+            <!-- Browser Mode -->
+            <div class="card">
+                <h2><span class="icon">🔍</span> Find Link (Browser Mode)</h2>
+                <p>Open a webpage in Chrome, detect and download the video stream</p>
+
+                <div class="input-group">
+                    <label for="browser-url">Webpage URL</label>
+                    <input type="text" id="browser-url" placeholder="https://example.com/watch/video123">
+                </div>
+
+                <div class="input-group">
+                    <label for="browser-filename">Filename (optional)</label>
+                    <input type="text" id="browser-filename"
+                        placeholder="video_name (leave empty for auto-generated name)">
+                    <div class="filename-error" id="browser-filename-error">A file with this name already exists</div>
+                </div>
+
+                <div class="input-group">
+                    <label for="browser-format">Output Format</label>
+                    <select id="browser-format">
+                        <optgroup label="Video Formats">
+                            <option value="mp4">MP4 (recommended)</option>
+                            <option value="mkv">MKV</option>
+                            <option value="webm">WebM</option>
+                            <option value="avi">AVI</option>
+                            <option value="mov">MOV</option>
+                            <option value="ts">TS (Transport Stream)</option>
+                            <option value="flv">FLV</option>
+                            <option value="wmv">WMV</option>
+                            <option value="m4v">M4V</option>
+                        </optgroup>
+                        <optgroup label="Audio Only">
+                            <option value="mp3">MP3</option>
+                            <option value="aac">AAC</option>
+                            <option value="m4a">M4A</option>
+                            <option value="flac">FLAC</option>
+                            <option value="wav">WAV</option>
+                            <option value="ogg">OGG</option>
+                            <option value="opus">OPUS</option>
+                            <option value="wma">WMA</option>
+                        </optgroup>
+                    </select>
+                </div>
+
+                <div class="input-group">
+                    <label>
+                        <input type="checkbox" id="auto-download" style="width: auto; margin-right: 8px;">
+                        Auto-download matching stream
+                    </label>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                    <div class="input-group">
+                        <label for="preferred-resolution">Resolution</label>
+                        <select id="preferred-resolution">
+                            <option value="source" selected>Highest</option>
+                            <option value="2160p">4K (2160p)</option>
+                            <option value="1440p">1440p</option>
+                            <option value="1080p">1080p</option>
+                            <option value="720p">720p</option>
+                            <option value="480p">480p</option>
+                            <option value="360p">360p</option>
+                            <option value="160p">160p</option>
+                        </select>
+                    </div>
+
+                    <div class="input-group">
+                        <label for="preferred-framerate">Framerate</label>
+                        <select id="preferred-framerate">
+                            <option value="any" selected>Source/Highest</option>
+                            <option value="60">60fps</option>
+                            <option value="30">30fps</option>
+                        </select>
+                    </div>
+                </div>
+
+                <button class="btn" id="browser-start-btn" onclick="startBrowser()">
+                    Open Browser & Detect
+                </button>
+
+                <button class="btn btn-secondary" id="clear-cookies-btn" onclick="clearCookies()">
+                    🗑️ Clear Cookies
+                </button>
+
+                <div class="status-box" id="browser-status"></div>
+            </div>
+
+            <!-- VNC Container -->
+            <div class="card vnc-container" id="vnc-container">
+                <div class="vnc-header">
+                    <h2><span class="icon">🖥️</span> Browser View</h2>
+                    <button class="btn btn-secondary" style="width: auto; padding: 10px 20px;" onclick="closeBrowser()">
+                        Close Browser
+                    </button>
+                </div>
+                <p style="color: #b8b8d1; margin-bottom: 10px; font-size: 0.9rem;">
+                    💡 <strong>Tip:</strong> If you see "Connect" button, it will auto-connect. Any HTTP warnings can be
+                    ignored - they're normal for local networks.
+                </p>
+                <iframe id="vnc-frame" class="vnc-frame" src=""></iframe>
+            </div>
+
+            <!-- Scheduled Downloads -->
+            <!-- Scheduled Downloads -->
+            <!-- Scheduled Downloads -->
+            <div class="card">
+                <h2><span class="icon">📅</span> Scheduled Downloads</h2>
+                <p>Schedule automatic stream checks. The browser will open the page and search for video streams.</p>
+
+                <h3 style="margin-bottom: 15px; font-size: 1.1rem; color: #e0e0e0;">Add New Schedule</h3>
+
+                <div class="input-group">
+                    <label for="sched-url">Webpage URL</label>
+                    <input type="text" id="sched-url" placeholder="https://example.com/watch/video123">
+                </div>
+
+                <div class="input-group">
+                    <label for="sched-name">Name (Optional - used as filename prefix)</label>
+                    <input type="text" id="sched-name" placeholder="e.g., myStream (will create myStream-14-30-45-Mon-Jan.mp4)">
+                </div>
+
+                <div class="input-group">
+                    <label>
+                        <input type="checkbox" id="sched-daily" style="width: auto; margin-right: 8px;" onchange="toggleDailySchedule()">
+                        Run Daily (Repeat every day at the same time)
+                    </label>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                    <div class="input-group">
+                        <label for="sched-start" id="sched-start-label">Start Time</label>
+                        <input type="datetime-local" id="sched-start">
+                    </div>
+                    <div class="input-group">
+                        <label for="sched-end" id="sched-end-label">End Time</label>
+                        <input type="datetime-local" id="sched-end">
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                    <div class="input-group">
+                        <label for="sched-resolution">Target Resolution</label>
+                        <select id="sched-resolution" class="select-input">
+                            <option value="source" selected>Highest</option>
+                            <option value="2160p">4K (2160p)</option>
+                            <option value="1440p">1440p</option>
+                            <option value="1080p">1080p</option>
+                            <option value="720p">720p</option>
+                            <option value="480p">480p</option>
+                            <option value="360p">360p</option>
+                            <option value="160p">160p</option>
+                        </select>
+                    </div>
+                    <div class="input-group">
+                        <label for="sched-framerate">Target FPS</label>
+                        <select id="sched-framerate" class="select-input">
+                            <option value="any" selected>Any</option>
+                            <option value="60">60 FPS</option>
+                            <option value="30">30 FPS</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="input-group">
+                    <label for="sched-format">Output Format</label>
+                    <select id="sched-format">
+                        <optgroup label="Video Formats">
+                            <option value="mp4">MP4 (recommended)</option>
+                            <option value="mkv">MKV</option>
+                            <option value="webm">WebM</option>
+                            <option value="avi">AVI</option>
+                            <option value="mov">MOV</option>
+                            <option value="ts">TS (Transport Stream)</option>
+                            <option value="flv">FLV</option>
+                            <option value="wmv">WMV</option>
+                            <option value="m4v">M4V</option>
+                        </optgroup>
+                        <optgroup label="Audio Only">
+                            <option value="mp3">MP3</option>
+                            <option value="aac">AAC</option>
+                            <option value="m4a">M4A</option>
+                            <option value="flac">FLAC</option>
+                            <option value="wav">WAV</option>
+                            <option value="ogg">OGG</option>
+                            <option value="opus">OPUS</option>
+                            <option value="wma">WMA</option>
+                        </optgroup>
+                    </select>
+                </div>
+
+                <div class="input-group" id="sched-repeat-container">
+                    <label>
+                        <input type="checkbox" id="sched-repeat" style="width: auto; margin-right: 8px;">
+                        Repeat Weekly (Same time next week)
+                    </label>
+                </div>
+
+                <button class="btn" onclick="addSchedule()">
+                    Add Schedule
+                </button>
+
+                <div class="status-box" id="sched-status" style="margin-top: 15px;"></div>
+            </div>
+
+            <!-- Active Schedules -->
+            <div class="card">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <h2 style="margin: 0;"><span class="icon">📋</span> Active Schedules</h2>
+                    <button class="btn btn-secondary" style="width: auto; padding: 8px 16px; font-size: 0.9rem;" onclick="refreshScheduleTimes()">🔄 Refresh Times</button>
+                </div>
+                <div id="schedules-list" style="display: grid; gap: 10px; min-height: 200px; max-height: 70vh; overflow-y: auto;">
+                    <!-- Schedules will be loaded here -->
+                </div>
+            </div>
+
+            <!-- Active Downloads -->
+            <div class="card downloads-list">
+                <h2><span class="icon">⏬</span> Active Downloads</h2>
+                <div id="active-downloads-container">
+                    <p style="color: #b8b8d1; padding: 20px;">No active downloads</p>
+                </div>
+            </div>
+
+            <!-- Completed Downloads -->
+            <div class="card downloads-list">
+                <h2><span class="icon">✅</span> Completed Downloads</h2>
+                <div id="completed-downloads-container">
+                    <p style="color: #b8b8d1; padding: 20px;">Loading...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Load JavaScript modules in dependency order -->
+    <script src="{{ url_for('static', filename='js/state.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/validation.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/ui.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/downloads-browser.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/schedules.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/init.js') }}"></script>
+
+    <!-- Download Success Popup -->
+    <div class="popup-overlay" id="popup-overlay"></div>
+    <div class="download-popup" id="download-popup">
+        <h3>✓ Download Started!</h3>
+        <img class="thumbnail" id="popup-thumbnail" src="" alt="Video thumbnail">
+        <div class="info">
+            <p><strong>Stream Type:</strong> <span id="popup-stream-type"></span></p>
+            <p><strong>Saving to:</strong> <span id="popup-filename"></span></p>
+        </div>
+        <div class="countdown" id="popup-countdown">
+            Window closing in <strong>15</strong> seconds...
+        </div>
+        <div class="popup-buttons">
+            <button class="btn" onclick="closePopup()">Close Now</button>
+            <button class="btn btn-secondary" onclick="keepOpen()">Keep Open</button>
+        </div>
+    </div>
+
+    <!-- Resolution Selection Popup -->
+    <div class="download-popup" id="resolution-popup">
+        <h3>📺 Detected Streams</h3>
+        <p style="margin-bottom: 20px;">Select which stream to download:</p>
+        <div id="resolution-options" style="max-height: 400px; overflow-y: auto; margin-bottom: 20px;">
+            <!-- Resolution buttons will be added here dynamically -->
+        </div>
+        <button class="btn btn-secondary" onclick="closeResolutionPopup()">Cancel & Keep Browsing</button>
+    </div>
+
+    <!-- Download Started Popup -->
+    <div class="download-popup" id="download-started-popup" style="max-width: 600px;">
+        <h3>✅ Download Started</h3>
+        <div id="download-info" style="background: #1e1e30; padding: 15px; border-radius: 8px; margin: 15px 0; border: 1px solid #4a4a6a;">
+            <!-- Download info will be dynamically added here -->
+        </div>
+        <p id="countdown-text" style="text-align: center; color: #b8b8d1; margin: 15px 0;">
+            Browser will close automatically in <strong id="countdown">15</strong> seconds
+        </p>
+        <div id="browser-buttons" style="display: flex; gap: 10px; justify-content: center;">
+            <button class="btn" onclick="closeBrowserNow()">🗙 Close Browser Now</button>
+            <button class="btn btn-secondary" onclick="keepBrowserOpen()">✓ Keep Browser Open</button>
+        </div>
+        <div id="direct-buttons" style="display: none; justify-content: center;">
+            <button class="btn" onclick="closeDownloadPopup()">✓ OK</button>
+        </div>
+    </div>
+
+    <!-- Debug Stream Log Popup -->
+    <div class="download-popup" id="debug-popup" style="max-width: 800px;">
+        <h3>🔍 Debug: Detected Streams Log</h3>
+        <p style="margin-bottom: 10px; color: #b8b8d1;">Copy this log for debugging. Updates automatically as streams are
+            detected.</p>
+        <textarea id="debug-log" readonly
+            style="width: 100%; height: 400px; font-family: monospace; font-size: 0.85rem; padding: 10px; border: 2px solid #4a4a6a; border-radius: 8px; background: #1e1e30; color: #e0e0e0; resize: vertical;"></textarea>
+        <div style="display: flex; gap: 10px; margin-top: 15px;">
+            <button class="btn" onclick="copyDebugLog()">📋 Copy to Clipboard</button>
+            <button class="btn btn-secondary" onclick="closeDebugPopup()">Close</button>
+        </div>
+    </div>
+
+    <!-- Stream Selection Modal -->
+    <div id="stream-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>📺 Select Stream to Download</h2>
+                <span class="close-modal" onclick="closeStreamModal()">&times;</span>
+            </div>
+            <div id="streams-container" class="streams-grid">
+                <!-- Streams will be dynamically added here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Schedule Modal -->
+    <div id="edit-schedule-modal" class="modal">
+        <div class="modal-content" style="max-width: 600px;">
+            <div class="modal-header">
+                <h2>✏️ Edit Schedule</h2>
+                <span class="close-modal" onclick="closeEditScheduleModal()">&times;</span>
+            </div>
+            <div style="padding: 10px 0;">
+                <div class="input-group">
+                    <label for="edit-sched-url">URL</label>
+                    <input type="text" id="edit-sched-url" placeholder="https://example.com/watch/video123">
+                </div>
+
+                <div class="input-group">
+                    <label for="edit-sched-name">Name (Optional - used as filename prefix)</label>
+                    <input type="text" id="edit-sched-name" placeholder="e.g., myStream">
+                </div>
+
+                <div class="input-group">
+                    <label>
+                        <input type="checkbox" id="edit-sched-daily" style="width: auto; margin-right: 8px;" onchange="toggleEditDailySchedule()">
+                        Run Daily (Repeat every day at the same time)
+                    </label>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                    <div class="input-group">
+                        <label for="edit-sched-start" id="edit-sched-start-label">Start Time</label>
+                        <input type="datetime-local" id="edit-sched-start">
+                    </div>
+                    <div class="input-group">
+                        <label for="edit-sched-end" id="edit-sched-end-label">End Time</label>
+                        <input type="datetime-local" id="edit-sched-end">
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                    <div class="input-group">
+                        <label for="edit-sched-resolution">Target Resolution</label>
+                        <select id="edit-sched-resolution" class="select-input">
+                            <option value="source">Highest</option>
+                            <option value="2160p">4K (2160p)</option>
+                            <option value="1440p">1440p</option>
+                            <option value="1080p">1080p</option>
+                            <option value="720p">720p</option>
+                            <option value="480p">480p</option>
+                            <option value="360p">360p</option>
+                            <option value="160p">160p</option>
+                        </select>
+                    </div>
+                    <div class="input-group">
+                        <label for="edit-sched-framerate">Target FPS</label>
+                        <select id="edit-sched-framerate" class="select-input">
+                            <option value="any">Any</option>
+                            <option value="60">60 FPS</option>
+                            <option value="30">30 FPS</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="input-group">
+                    <label for="edit-sched-format">Output Format</label>
+                    <select id="edit-sched-format">
+                        <optgroup label="Video Formats">
+                            <option value="mp4">MP4 (recommended)</option>
+                            <option value="mkv">MKV</option>
+                            <option value="webm">WebM</option>
+                            <option value="avi">AVI</option>
+                            <option value="mov">MOV</option>
+                            <option value="ts">TS (Transport Stream)</option>
+                            <option value="flv">FLV</option>
+                            <option value="wmv">WMV</option>
+                            <option value="m4v">M4V</option>
+                        </optgroup>
+                        <optgroup label="Audio Only">
+                            <option value="mp3">MP3</option>
+                            <option value="aac">AAC</option>
+                            <option value="m4a">M4A</option>
+                            <option value="flac">FLAC</option>
+                            <option value="wav">WAV</option>
+                            <option value="ogg">OGG</option>
+                            <option value="opus">OPUS</option>
+                            <option value="wma">WMA</option>
+                        </optgroup>
+                    </select>
+                </div>
+
+                <div class="input-group" id="edit-sched-repeat-container">
+                    <label>
+                        <input type="checkbox" id="edit-sched-repeat" style="width: auto; margin-right: 8px;">
+                        Repeat weekly
+                    </label>
+                </div>
+
+                <button class="btn" onclick="updateSchedule()">Update Schedule</button>
+
+                <div class="status-box" id="edit-sched-status" style="margin-top: 15px;"></div>
+            </div>
+        </div>
+    </div>
+
+</body>
+
+</html>
