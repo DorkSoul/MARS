@@ -3,6 +3,7 @@
 import time
 import logging
 import threading
+from datetime import datetime
 from typing import List, Dict, Optional, Any, Callable
 
 from app.utils import MetadataExtractor, ThumbnailGenerator
@@ -277,19 +278,20 @@ class StreamSelectionCoordinator:
             Complete filename with extension
         """
         ext = self.output_format
+        timestamp_str = datetime.now().strftime("%H-%M-%S-%a-%b")
 
         if self.filename:
-            # Check if filename already has an extension
+            # Check if filename already has an extension (full override)
             if '.' in self.filename:
                 return self.filename
             else:
-                return f"{self.filename}.{ext}"
+                # Use filename as prefix: name-HH-MM-SS-DDD-MMM.ext
+                # Example: myName-14-30-45-Mon-Jan.mp4
+                return f"{self.filename}-{timestamp_str}.{ext}"
         else:
-            # Generate timestamp-based filename
-            timestamp = int(time.time())
-            # Sanitize resolution name for filename (remove special chars)
-            safe_resolution = resolution_name.replace(' ', '_').replace('/', '_')
-            return f"video_{safe_resolution}_{timestamp}.{ext}"
+            # Generate filename in format: HH-MM-SS-DDD-MMM.ext
+            # Example: 14-30-45-Mon-Jan.mp4
+            return f"{timestamp_str}.{ext}"
 
     def get_selection_state(self) -> Dict[str, Any]:
         """

@@ -3,6 +3,7 @@ import time
 import json
 import logging
 import subprocess
+from datetime import datetime
 from flask import Blueprint, request, jsonify
 
 logger = logging.getLogger(__name__)
@@ -13,7 +14,7 @@ download_bp = Blueprint('download', __name__, url_prefix='/api/downloads')
 _metadata_cache = {}
 
 
-def init_download_routes(download_service, download_dir):
+def init_download_routes(download_service, download_dir, scheduler=None):
     """Initialize download routes with services"""
 
     def get_file_metadata(filepath):
@@ -136,9 +137,12 @@ def init_download_routes(download_service, download_dir):
             if not stream_url:
                 return jsonify({'error': 'No URL provided'}), 400
 
-            # Generate filename
-            timestamp = int(time.time())
-            filename = data.get('filename', f"video_{timestamp}.mp4")
+            # Generate filename in format: HH-MM-SS-DDD-MMM.ext or name-HH-MM-SS-DDD-MMM.ext
+            # Example: 14-30-45-Mon-Jan.mp4 or myName-14-30-45-Mon-Jan.mp4
+            timestamp = int(time.time())  # Keep for browser_id uniqueness
+            timestamp_str = datetime.now().strftime("%H-%M-%S-%a-%b")
+            default_filename = f"{timestamp_str}.mp4"
+            filename = data.get('filename', default_filename)
 
             # Start download
             browser_id, output_path = download_service.start_direct_download(
@@ -237,6 +241,11 @@ def init_download_routes(download_service, download_dir):
         """Stop an active download"""
         try:
             if download_service.stop_download(browser_id):
+                # If this is a scheduled download, move it to the next time slot
+                if scheduler and browser_id.startswith('sched_'):
+                    scheduler.move_to_next_slot(browser_id)
+                    logger.info(f"Moved scheduled download {browser_id} to next time slot")
+
                 return jsonify({'success': True, 'message': 'Download stopped'})
             else:
                 return jsonify({'error': 'Download not found'}), 404

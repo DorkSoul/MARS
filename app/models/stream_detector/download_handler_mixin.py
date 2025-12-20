@@ -8,6 +8,7 @@ import time
 import threading
 import websocket
 import requests as req_lib
+from datetime import datetime
 
 from app.utils import MetadataExtractor, ThumbnailGenerator
 
@@ -54,15 +55,20 @@ class DownloadHandlerMixin:
 
         # Generate filename
         ext = self.output_format
+        timestamp_str = datetime.now().strftime("%H-%M-%S-%a-%b")
+
         if self.filename:
-            # Check if filename already has an extension
+            # Check if filename already has an extension (full override)
             if '.' in self.filename:
                 filename = self.filename
             else:
-                filename = f"{self.filename}.{ext}"
+                # Use filename as prefix: name-HH-MM-SS-DDD-MMM.ext
+                # Example: myName-14-30-45-Mon-Jan.mp4
+                filename = f"{self.filename}-{timestamp_str}.{ext}"
         else:
-            timestamp = int(time.time())
-            filename = f"video_{resolution_name}_{timestamp}.{ext}"
+            # Generate filename in format: HH-MM-SS-DDD-MMM.ext
+            # Example: 14-30-45-Mon-Jan.mp4
+            filename = f"{timestamp_str}.{ext}"
 
         # Call download callback if set
         if self.download_callback:

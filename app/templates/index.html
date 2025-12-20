@@ -4,15 +4,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Universal Video Downloader</title>
+    <title>MARS - Media Archive Recording System</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 
 <body>
     <div class="container">
         <header>
-            <h1>🎬 Universal Video Downloader</h1>
-            <p>Download videos with browser-based authentication and stream detection</p>
+            <h1>🎬 MARS</h1>
+            <p>Media Archive Recording System - Intelligent stream recording and archiving</p>
         </header>
 
         <div class="main-content">
@@ -180,7 +180,12 @@
 
                 <div class="input-group">
                     <label for="sched-url">Webpage URL</label>
-                    <input type="text" id="sched-url" placeholder="https://www.twitch.tv/channel">
+                    <input type="text" id="sched-url" placeholder="https://example.com/watch/video123">
+                </div>
+
+                <div class="input-group">
+                    <label for="sched-name">Name (Optional - used as filename prefix)</label>
+                    <input type="text" id="sched-name" placeholder="e.g., myStream (will create myStream-14-30-45-Mon-Jan.mp4)">
                 </div>
 
                 <div class="input-group">
@@ -385,7 +390,12 @@
             <div style="padding: 10px 0;">
                 <div class="input-group">
                     <label for="edit-sched-url">URL</label>
-                    <input type="text" id="edit-sched-url" placeholder="https://example.com/stream">
+                    <input type="text" id="edit-sched-url" placeholder="https://example.com/watch/video123">
+                </div>
+
+                <div class="input-group">
+                    <label for="edit-sched-name">Name (Optional - used as filename prefix)</label>
+                    <input type="text" id="edit-sched-name" placeholder="e.g., myStream">
                 </div>
 
                 <div class="input-group">
