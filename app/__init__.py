@@ -1,1 +1,1 @@
-# MARS - Media Archive Recording System
+# Video Downloader App

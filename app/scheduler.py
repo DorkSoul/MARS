@@ -9,16 +9,7 @@ from datetime import datetime, timedelta
 logger = logging.getLogger(__name__)
 
 class Scheduler:
-    """
-    Manages scheduled stream checks with intelligent retry and resilience.
-
-    Features:
-    - Daily and weekly recurring schedules
-    - Auto-resume on stream failures within time windows
-    - Manual stop detection and handling
-    - Specific download tracking for multi-stream support
-    - Thread-safe schedule management with JSON persistence
-    """
+    """Manages scheduled stream checks"""
 
     def __init__(self, config, browser_service):
         self.config = config
@@ -63,7 +54,7 @@ class Scheduler:
             schedule = {
                 'id': str(int(time.time() * 1000)),
                 'url': url,
-                'name': name,  # Optional name for filename prefix (not defaulting to URL)
+                'name': name or url,
                 'resolution': resolution,
                 'framerate': framerate,
                 'format': format,
@@ -97,7 +88,7 @@ class Scheduler:
                 if schedule['id'] == schedule_id:
                     # Update fields
                     schedule['url'] = url
-                    schedule['name'] = name  # Optional name, not defaulting to URL
+                    schedule['name'] = name or url
                     schedule['start_time'] = start_time
                     schedule['end_time'] = end_time
                     schedule['repeat'] = repeat
@@ -118,70 +109,6 @@ class Scheduler:
 
             return None
 
-    def move_to_next_slot(self, browser_id):
-        """
-        Move a schedule to its next time slot immediately after user stops download.
-
-        When user manually stops a download, the schedule is reset to 'pending'
-        and moved to the next occurrence (next day for daily, next week for weekly).
-
-        Args:
-            browser_id: The browser_id of the stopped download
-
-        Returns:
-            bool: True if schedule was found and moved, False otherwise
-        """
-        # Check if this is a scheduled download (format: sched_{schedule_id}_{timestamp})
-        if not browser_id.startswith('sched_'):
-            return False
-
-        # Extract schedule_id from browser_id
-        parts = browser_id.split('_')
-        if len(parts) < 2:
-            return False
-
-        schedule_id = parts[1]
-
-        with self.lock:
-            for schedule in self.schedules:
-                if schedule['id'] == schedule_id:
-                    # Only process if this is the active browser_id
-                    if schedule.get('active_browser_id') == browser_id:
-                        # Reset schedule state
-                        schedule['status'] = 'pending'
-                        schedule['active_browser_id'] = None
-                        schedule['manual_stop'] = False
-
-                        # Move to next time slot
-                        if schedule.get('daily'):
-                            # Daily schedule - explicitly move to tomorrow's start time
-                            logger.info(f"Moving daily schedule {schedule_id} to next day")
-                            start_time_str = schedule['start_time']
-                            start_hour, start_min = map(int, start_time_str.split(':'))
-
-                            # Calculate tomorrow's start time
-                            now = datetime.now()
-                            tomorrow = now.date() + timedelta(days=1)
-                            next_start = datetime.combine(tomorrow, datetime.min.time().replace(hour=start_hour, minute=start_min))
-
-                            schedule['next_check'] = next_start.isoformat()
-                            logger.info(f"Daily schedule {schedule_id} moved to {next_start}")
-                        elif schedule.get('repeat'):
-                            # Weekly recurring - move to next week
-                            logger.info(f"Moving weekly schedule {schedule_id} to next week")
-                            self._reschedule_next_week(schedule)
-                        else:
-                            # One-time schedule - mark as completed
-                            logger.info(f"One-time schedule {schedule_id} stopped, marking as completed")
-                            schedule['status'] = 'completed'
-                            self._update_next_check(schedule)
-
-                        self.save_schedules()
-                        logger.info(f"Schedule {schedule_id} moved to next time slot (browser_id: {browser_id})")
-                        return True
-
-        return False
-
     def get_schedules(self):
         """Get all schedules, sorted by next_check time"""
         # Sort schedules by next_check time (soonest first)
@@ -196,28 +123,14 @@ class Scheduler:
         return sorted_schedules
 
     def refresh_all_schedule_times(self):
-        """
-        Reset all schedules as if they were just created.
-
-        This clears all manual stops, resets statuses to pending,
-        and recalculates next_check times. If a schedule's time window
-        is currently active, it will start checking for streams again.
-        """
+        """Force refresh all schedule next_check times"""
         with self.lock:
             count = 0
             for schedule in self.schedules:
-                # Reset schedule state completely
-                schedule['status'] = 'pending'
-                schedule['active_browser_id'] = None
-                schedule['manual_stop'] = False
-                schedule['last_check'] = None
-
-                # Recalculate next_check time
                 self._update_next_check(schedule)
                 count += 1
-
             self.save_schedules()
-            logger.info(f"Reset {count} schedules to fresh state")
+            logger.info(f"Refreshed {count} schedule next_check times")
             return count
 
     def start(self):
@@ -280,39 +193,16 @@ class Scheduler:
                             else:
                                 if schedule['status'] != 'download_started':
                                     schedule['status'] = 'completed'
-                                # Clear flags when window ends
-                                schedule['active_browser_id'] = None
-                                schedule['manual_stop'] = False
                             continue
 
                         # Check if currently active window
                         if start_dt <= now <= end_dt:
                             if schedule['status'] == 'download_started':
-                                # Check if the specific download is still active
-                                active_browser_id = schedule.get('active_browser_id')
-                                if self._is_download_active(active_browser_id):
-                                    # Download still running, keep status and skip check
-                                    continue
-                                else:
-                                    # Download crashed/failed automatically - resume checking
-                                    logger.info(f"Download {active_browser_id} stopped for schedule {schedule['id']}, resuming stream checks")
-                                    schedule['status'] = 'active'
-                                    schedule['active_browser_id'] = None
-                                    # Will proceed to check stream below
+                                # Already downloaded for this window
+                                continue
 
-                            # Ensure status is active, but only if next_check is within current window
-                            if schedule['status'] != 'active':
-                                next_check_val = schedule.get('next_check')
-                                if next_check_val:
-                                    try:
-                                        next_check_dt = datetime.fromisoformat(next_check_val)
-                                        # Only change to active if next_check is not beyond current window
-                                        if next_check_dt <= end_dt:
-                                            schedule['status'] = 'active'
-                                    except (ValueError, TypeError):
-                                        schedule['status'] = 'active'
-                                else:
-                                    schedule['status'] = 'active'
+                            # Transition to active status
+                            schedule['status'] = 'active'
 
                             # Check if it's time to check stream
                             next_check = schedule.get('next_check')
@@ -341,15 +231,7 @@ class Scheduler:
             self.save_schedules()
 
     def _check_daily_schedule(self, schedule, now):
-        """
-        Check a daily schedule (time-based, repeats every day).
-
-        Handles:
-        - Midnight-spanning windows (e.g., 23:00-01:00)
-        - Status transitions (pending -> active -> download_started)
-        - Auto-resume on download failures (unless manually stopped)
-        - Proper reset when time window ends
-        """
+        """Check a daily schedule (time-based, repeats every day)"""
         # Parse the time strings (format: "HH:MM")
         start_time_str = schedule['start_time']
         end_time_str = schedule['end_time']
@@ -387,31 +269,11 @@ class Scheduler:
         # Check if we're currently in the active window
         if start_dt <= now <= end_dt:
             if schedule['status'] == 'download_started':
-                # Check if the specific download is still active
-                active_browser_id = schedule.get('active_browser_id')
-                if self._is_download_active(active_browser_id):
-                    # Download still running, keep status and skip check
-                    return
-                else:
-                    # Download crashed/failed automatically - resume checking
-                    logger.info(f"Download {active_browser_id} stopped for schedule {schedule['id']}, resuming stream checks")
-                    schedule['status'] = 'active'
-                    schedule['active_browser_id'] = None
-                    # Will proceed to check stream below
+                # Already downloaded for this window
+                return
 
-            # Ensure status is active, but only if next_check is within current window
-            if schedule['status'] != 'active':
-                next_check_val = schedule.get('next_check')
-                if next_check_val:
-                    try:
-                        next_check_dt = datetime.fromisoformat(next_check_val)
-                        # Only change to active if next_check is not beyond current window
-                        if next_check_dt <= end_dt:
-                            schedule['status'] = 'active'
-                    except (ValueError, TypeError):
-                        schedule['status'] = 'active'
-                else:
-                    schedule['status'] = 'active'
+            # Transition to active status
+            schedule['status'] = 'active'
 
             # Check if it's time to check stream
             next_check = schedule.get('next_check')
@@ -441,20 +303,10 @@ class Scheduler:
                 # Reset for next day
                 schedule['status'] = 'pending'
                 schedule['last_check'] = None
-                schedule['active_browser_id'] = None  # Clear tracked browser_id
-                schedule['manual_stop'] = False  # Clear manual stop flag for next time window
                 self._update_next_check(schedule)
 
     def _update_next_check(self, schedule):
-        """
-        Calculate next check time based on schedule window.
-
-        Logic:
-        - Before window: Schedule check at window start
-        - During window: Random 5-8 minute intervals
-        - After window: Schedule for next occurrence (daily/weekly)
-        - Handles midnight-spanning windows correctly
-        """
+        """Calculate next check time based on schedule window"""
         now = datetime.now()
 
         if schedule.get('daily'):
@@ -545,49 +397,11 @@ class Scheduler:
         schedule['start_time'] = new_start.isoformat()
         schedule['end_time'] = new_end.isoformat()
         schedule['status'] = 'pending'
-        schedule['active_browser_id'] = None  # Clear tracked browser_id
-        schedule['manual_stop'] = False  # Clear manual stop flag for next time window
 
         # Update next_check to the new window start
         self._update_next_check(schedule)
 
         logger.info(f"Rescheduled {schedule['id']} to next week: {new_start}")
-
-    def _is_download_active(self, browser_id):
-        """
-        Check if a specific download is still active.
-
-        A download is considered active if it exists in the download_queue
-        and doesn't have a 'completed_at' timestamp.
-
-        Args:
-            browser_id: The specific browser_id to check
-
-        Returns:
-            bool: True if the download is still active, False otherwise
-        """
-        try:
-            if not browser_id:
-                return False
-
-            download_queue = self.browser_service.download_service.download_queue
-
-            if browser_id in download_queue:
-                download_info = download_queue[browser_id]
-                # Check if download is still active (no completed_at)
-                is_active = 'completed_at' not in download_info
-                if is_active:
-                    logger.debug(f"Download {browser_id} is still active")
-                else:
-                    logger.debug(f"Download {browser_id} has completed")
-                return is_active
-            else:
-                logger.debug(f"Download {browser_id} not found in queue")
-                return False
-
-        except Exception as e:
-            logger.error(f"Error checking download status for {browser_id}: {e}")
-            return False
 
     def _perform_check(self, schedule):
         """Perform the actual browser check"""
@@ -613,14 +427,11 @@ class Scheduler:
         try:
             # Queue browser (will wait for previous browsers to close)
             logger.info(f"Requesting browser for schedule {schedule['id']} (will queue if needed)")
-            # Use schedule name as filename prefix (without extension)
-            # This will be combined with timestamp in the filename generator
-            filename_prefix = schedule.get('name') if schedule.get('name') else None
             success, detector = self.browser_service.start_browser(
                 url=schedule['url'],
                 browser_id=browser_id,
                 auto_download=True, # Important!
-                filename=filename_prefix,  # Pass name for prefix
+                filename=None, # Auto name
                 resolution=schedule.get('resolution', '1080p'),
                 framerate=schedule.get('framerate', 'any'),
                 output_format=schedule.get('format', 'mp4')
@@ -630,32 +441,62 @@ class Scheduler:
                 logger.warning(f"Failed to start browser for schedule {schedule['id']}")
                 return
 
-            # Monitor browser for stream detection (up to specified duration)
+            # Wait for random duration or until download starts
             start_wait = time.time()
             while time.time() - start_wait < duration:
+                # Check status
                 status = self.browser_service.get_browser_status(browser_id)
                 if not status:
                     break
-
-                # Check if download has started via download service
+                
+                # Check if downloading
+                # BrowserService.get_browser_status returns keys like 'started', 'finding_stream', etc.
+                # If auto_download is True, it might have transitioned to download service.
+                # We need to check if a download was triggered. 
+                # The detector has `set_download_callback`.
+                
+                # If download started, the detector might be closed or status changed?
+                # Actually, `start_browser` in `browser_service.py` sets callback `self.download_service.start_download`.
+                # If download starts, `start_download` is called.
+                
+                # We can check `download_service` status for this browser_id?
+                # Or check `detector.get_status()`?
+                
+                # Let's check if we can detect if download started.
+                # In `detector.py` (not visible but inferred), likely it calls callback.
+                
+                # We can rely on `download_service.get_download_status(browser_id)`
                 dl_status = self.browser_service.download_service.get_download_status(browser_id)
                 if dl_status:
-                    logger.info(f"Download started for schedule {schedule['id']}! (browser_id: {browser_id})")
-
+                    logger.info(f"Download started for schedule {schedule['id']}!")
+                    
                     with self.lock:
-                        for s in self.schedules:
-                            if s['id'] == schedule['id']:
-                                s['status'] = 'download_started'
-                                s['active_browser_id'] = browser_id
-                                self.save_schedules()
-                                break
-
-                    # Download started successfully, exit monitoring loop
+                        # Re-fetch schedule to ensure we have latest state (though it's in mem)
+                        # We need to find the specific dict object in self.schedules
+                        # (since we are in a thread, self.schedules might have changed if reloaded, but we share reference)
+                         for s in self.schedules:
+                             if s['id'] == schedule['id']:
+                                 s['status'] = 'download_started'
+                                 # Clear next_check - no more checks needed until next window
+                                 s['next_check'] = None
+                                 self.save_schedules()
+                                 break
+                    
+                    # We can close browser if we want, or let it handle it.
+                    # Usually download detached from browser? 
+                    # If ffmpeg, browser can close. If direct, browser can close.
+                    # The `auto_download` logic in `detector` likely closes browser if stream found?
+                    # Let's assume we should close it if it's still open to be safe, 
+                    # BUT `download_service` might be using cookies from it?
+                    # `BrowserService.start_browser` closes existing browsers.
+                    
+                    # If download started, we are GOOD.
+                    # The loop will end.
                     break
-
+                
                 time.sleep(1)
-
-            # Close browser after monitoring completes
+            
+            # cleanup
             logger.info(f"Closing browser for schedule {schedule['id']}")
             self.browser_service.close_browser(browser_id)
 

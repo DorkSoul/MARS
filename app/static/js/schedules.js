@@ -184,7 +184,6 @@ function toggleDailySchedule() {
 
 async function addSchedule() {
     let url = document.getElementById('sched-url').value.trim();
-    const name = document.getElementById('sched-name').value.trim();
     const start = document.getElementById('sched-start').value;
     const end = document.getElementById('sched-end').value;
     const repeat = document.getElementById('sched-repeat').checked;
@@ -204,35 +203,27 @@ async function addSchedule() {
         url = 'https://' + url;
     }
 
-    // Prepare request body
-    const requestBody = {
-        url: url,
-        start_time: start,
-        end_time: end,
-        repeat: repeat,
-        daily: daily,
-        resolution: resolution,
-        framerate: framerate,
-        format: format
-    };
-
-    // Only include name if it's not empty
-    if (name) {
-        requestBody.name = name;
-    }
-
     try {
         const response = await fetch('/api/schedules/', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(requestBody)
+            body: JSON.stringify({
+                url: url,
+                start_time: start,
+                end_time: end,
+                repeat: repeat,
+                daily: daily,
+                resolution: resolution,
+                framerate: framerate,
+                format: format,
+                name: url.substring(0, 30) + '...'
+            })
         });
 
         const data = await response.json();
         if (data.success) {
             showStatus(statusBox, 'Schedule added!', 'success');
             document.getElementById('sched-url').value = '';
-            document.getElementById('sched-name').value = '';
             loadSchedules();
         } else {
             showStatus(statusBox, 'Error: ' + data.error, 'error');
@@ -286,7 +277,6 @@ function editSchedule(schedule) {
 
     // Populate the form fields
     document.getElementById('edit-sched-url').value = schedule.url;
-    document.getElementById('edit-sched-name').value = schedule.name || '';
     document.getElementById('edit-sched-resolution').value = schedule.resolution || 'source';
     document.getElementById('edit-sched-framerate').value = schedule.framerate || 'any';
     document.getElementById('edit-sched-format').value = schedule.format || 'mp4';
@@ -395,7 +385,6 @@ async function updateSchedule() {
     }
 
     let url = document.getElementById('edit-sched-url').value.trim();
-    const name = document.getElementById('edit-sched-name').value.trim();
     const start = document.getElementById('edit-sched-start').value;
     const end = document.getElementById('edit-sched-end').value;
     const repeat = document.getElementById('edit-sched-repeat').checked;
@@ -415,28 +404,21 @@ async function updateSchedule() {
         url = 'https://' + url;
     }
 
-    // Prepare request body
-    const requestBody = {
-        url: url,
-        start_time: start,
-        end_time: end,
-        repeat: repeat,
-        daily: daily,
-        resolution: resolution,
-        framerate: framerate,
-        format: format
-    };
-
-    // Only include name if it's not empty
-    if (name) {
-        requestBody.name = name;
-    }
-
     try {
         const response = await fetch(`/api/schedules/${AppState.currentEditScheduleId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(requestBody)
+            body: JSON.stringify({
+                url: url,
+                start_time: start,
+                end_time: end,
+                repeat: repeat,
+                daily: daily,
+                resolution: resolution,
+                framerate: framerate,
+                format: format,
+                name: url.substring(0, 30) + '...'
+            })
         });
 
         const data = await response.json();
