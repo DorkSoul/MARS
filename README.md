@@ -56,27 +56,57 @@ A self-hosted media archiving system designed for Docker environments. Record an
 
 ## Quick Start
 
-### Deploy with Portainer (Recommended)
+### Using Docker Compose (Recommended)
 
-1. In Portainer, go to **Stacks** > **Add Stack**
-2. Choose **Repository** deployment method
-3. Enter your GitHub repository URL
-4. Set the compose path: `docker-compose.yml`
-5. Click **Deploy the stack**
+1. **Download the example compose file:**
+   ```bash
+   wget https://raw.githubusercontent.com/DorkSoul/MARS/main/docker-compose.example.yml -O docker-compose.yml
+   ```
 
-### Manual Docker Compose
+   Or create a `docker-compose.yml` file with this content:
+   ```yaml
+   version: '3.8'
 
-```bash
-# Clone the repository
-git clone <your-repo-url>
-cd ffmepg-downloader
+   services:
+     mars:
+       image: ghcr.io/dorksoul/mars:latest
+       container_name: mars
+       restart: unless-stopped
+       ports:
+         - "5000:5000" # Flask web interface
+         - "6080:6080" # noVNC
+       volumes:
+         - ./downloads:/app/downloads:rw
+         - ./chrome-data:/app/chrome-data:rw
+         - ./logs:/app/logs:rw
+       environment:
+         - DISPLAY=:99
+         - CHROME_USER_DATA_DIR=/app/chrome-data
+         - DOWNLOAD_DIR=/app/downloads
+         - AUTO_CLOSE_DELAY=15
+         - FLASK_ENV=production
+       shm_size: 2gb
+       security_opt:
+         - seccomp:unconfined
+   ```
 
-# Start the container
-docker-compose up -d
+2. **Adjust volume paths** in the compose file to match your system (if needed)
 
-# Check logs
-docker-compose logs -f
-```
+3. **Deploy the container:**
+   ```bash
+   docker-compose up -d
+   ```
+
+4. **Check logs:**
+   ```bash
+   docker-compose logs -f
+   ```
+
+5. **Update to the latest version:**
+   ```bash
+   docker-compose pull
+   docker-compose up -d
+   ```
 
 ## Access
 
@@ -169,12 +199,39 @@ For scheduled downloads, add an optional name to prefix the timestamp:
 
 ## Volume Mapping
 
-The `docker-compose.yml` is pre-configured with example paths. Adjust these to match your host system:
+The `docker-compose.example.yml` provides default paths that work for most users. Adjust these to match your host system:
 
 - `./downloads` -> `/app/downloads`: Where finished files are saved
 - `./chrome-data` -> `/app/chrome-data`: Persistence for Chrome user profile (cookies, sessions)
 - `./logs` -> `/app/logs`: Application logs
-- `./schedules` -> `/app/schedules`: Schedule configuration persistence
+
+**Example custom paths:**
+```yaml
+volumes:
+  - /path/to/your/media:/app/downloads:rw
+  - /path/to/persistent/chrome:/app/chrome-data:rw
+  - /path/to/logs:/app/logs:rw
+```
+
+## Building from Source (Optional)
+
+If you want to build the Docker image yourself instead of using the pre-built image:
+
+```bash
+# Clone the repository
+git clone https://github.com/DorkSoul/MARS.git
+cd MARS
+
+# Build the image
+docker build -t mars:latest .
+
+# Update docker-compose.yml to use your local image
+# Change: image: ghcr.io/dorksoul/mars:latest
+# To:     image: mars:latest
+
+# Deploy
+docker-compose up -d
+```
 
 ## Configuration
 

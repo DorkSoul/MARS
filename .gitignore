@@ -45,9 +45,7 @@ logs/
 *.m3u8
 *.ts
 
-# Environment variables
-.env
-.env.local
 
 # Docker
+docker-compose.yml  # Personal compose file with specific paths
 docker-compose.override.yml

@@ -9,9 +9,10 @@ services:
       - "5000:5000" # Flask web interface
       - "6080:6080" # noVNC
     volumes:
-      - /volume1/media/downloads:/app/downloads:rw  # Location for downloaded media
-      - /volume2/Dockerssd/mars/chrome-data:/app/chrome-data:rw # Location for Chrome data persistence
-      - /volume2/Dockerssd/mars/logs:/app/logs:rw # Location for application logs
+      # Adjust these paths to match your system
+      - ./downloads:/app/downloads:rw  # Location for downloaded media
+      - ./chrome-data:/app/chrome-data:rw # Location for Chrome data persistence
+      - ./logs:/app/logs:rw # Location for application logs
     environment:
       - DISPLAY=:99
       - CHROME_USER_DATA_DIR=/app/chrome-data
