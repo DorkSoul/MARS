@@ -60,7 +60,7 @@ A self-hosted media archiving system designed for Docker environments. Record an
 
 1. **Download the example compose file:**
    ```bash
-   wget https://raw.githubusercontent.com/DorkSoul/MARS/main/docker-compose.example.yml -O docker-compose.yml
+   wget https://raw.githubusercontent.com/DorkSoul/MARS/main/docker-compose.example -O docker-compose.yml
    ```
 
    Or create a `docker-compose.yml` file with this content:
@@ -199,7 +199,7 @@ For scheduled downloads, add an optional name to prefix the timestamp:
 
 ## Volume Mapping
 
-The `docker-compose.example.yml` provides default paths that work for most users. Adjust these to match your host system:
+The `docker-compose.example` file provides default paths that work for most users. Adjust these to match your host system:
 
 - `./downloads` -> `/app/downloads`: Where finished files are saved
 - `./chrome-data` -> `/app/chrome-data`: Persistence for Chrome user profile (cookies, sessions)
