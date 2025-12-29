@@ -55,7 +55,7 @@ class DownloadHandlerMixin:
 
         # Generate filename
         ext = self.output_format
-        timestamp_str = datetime.now().strftime("%H-%M-%S-%a-%b")
+        timestamp_str = datetime.now().strftime("%H-%M-%S-%a-%d-%b").lower()
 
         if self.filename:
             # Check if filename already has an extension (full override)
