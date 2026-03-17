@@ -278,4 +278,14 @@ def init_download_routes(download_service, download_dir, scheduler=None):
             logger.error(f"Delete download error: {e}")
             return jsonify({'error': str(e)}), 500
 
+    @download_bp.route('/history', methods=['GET'])
+    def download_history():
+        """Return the persisted download history log."""
+        try:
+            history = download_service.get_history()
+            return jsonify({'history': history})
+        except Exception as e:
+            logger.error(f"History error: {e}")
+            return jsonify({'error': str(e)}), 500
+
     return download_bp

@@ -4,6 +4,7 @@ from app.services import DownloadService, BrowserService
 from app.scheduler import Scheduler
 from app.routes import init_browser_routes, init_download_routes
 from app.routes.scheduler_routes import init_scheduler_routes
+from app.routes.events_routes import init_events_routes
 
 
 def create_app():
@@ -32,11 +33,13 @@ def create_app():
     browser_bp = init_browser_routes(browser_service, download_service, config)
     download_bp = init_download_routes(download_service, config.DOWNLOAD_DIR, scheduler)
     scheduler_bp = init_scheduler_routes(scheduler)
+    events_bp = init_events_routes(browser_service, download_service)
 
     # Register blueprints
     flask_app.register_blueprint(browser_bp)
     flask_app.register_blueprint(download_bp)
     flask_app.register_blueprint(scheduler_bp)
+    flask_app.register_blueprint(events_bp)
 
     # Main route
     @flask_app.route('/')
