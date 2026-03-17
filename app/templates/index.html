@@ -5,13 +5,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MARS - Media Archive Recording System</title>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='icons/mars.svg') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <meta name="theme-color" content="#1a1a2e">
 </head>
 
 <body>
     <div class="container">
         <header>
-            <h1>🎬 MARS</h1>
+            <h1><img src="{{ url_for('static', filename='icons/mars.svg') }}" alt="Mars" style="width: 2.2rem; height: 2.2rem; vertical-align: middle; margin-right: 0.4rem;"> MARS</h1>
             <p>Media Archive Recording System - Intelligent stream recording and archiving</p>
         </header>
 
@@ -272,12 +274,12 @@
             </div>
 
             <!-- Active Schedules -->
-            <div class="card">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+            <div class="card" style="display: flex; flex-direction: column;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-shrink: 0;">
                     <h2 style="margin: 0;"><span class="icon">📋</span> Active Schedules</h2>
                     <button class="btn btn-secondary" style="width: auto; padding: 8px 16px; font-size: 0.9rem;" onclick="refreshScheduleTimes()">🔄 Refresh Times</button>
                 </div>
-                <div id="schedules-list" style="display: grid; gap: 10px; min-height: 200px; max-height: 70vh; overflow-y: auto;">
+                <div id="schedules-list" style="display: grid; align-content: start; gap: 10px; flex: 1; overflow-y: auto;">
                     <!-- Schedules will be loaded here -->
                 </div>
             </div>

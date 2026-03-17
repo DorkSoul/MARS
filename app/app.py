@@ -19,7 +19,7 @@ def create_app():
     config.log_startup_info(logger)
 
     # Initialize services
-    download_service = DownloadService(config.DOWNLOAD_DIR)
+    download_service = DownloadService(config.DOWNLOAD_DIR, history_file=config.HISTORY_FILE)
     browser_service = BrowserService(config, download_service)
 
     # Initialize Scheduler

@@ -12,13 +12,15 @@ logger = logging.getLogger(__name__)
 class DownloadService:
     """Manages video downloads using FFmpeg"""
 
-    def __init__(self, download_dir):
+    def __init__(self, download_dir, history_file=None):
         self.download_dir = download_dir
         self._queue_lock = threading.Lock()
         self.download_queue = {}          # protected by _queue_lock
         self.direct_download_status = {}  # protected by _queue_lock
         self.download_thumbnails = {}     # protected by _queue_lock
-        self._history_file = os.path.join(download_dir, '.download_history.json')
+        # History file lives in /app/logs by default so it doesn't appear
+        # inside the user's downloads folder. Can be overridden via history_file.
+        self._history_file = history_file or os.path.join(download_dir, '.download_history.json')
 
     # ------------------------------------------------------------------ #
     # Public API
