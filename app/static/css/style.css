@@ -46,6 +46,47 @@ header p {
     }
 }
 
+/* Schedule row — spans both grid columns so the pair forms its own flex row.
+   The form card determines the height; the active-schedules card stretches
+   to match without letting its list content expand the row. */
+.schedule-row {
+    grid-column: 1 / -1;
+    display: flex;
+    gap: 20px;
+    align-items: stretch;
+}
+
+.schedule-form-card {
+    flex: none;
+    width: calc(50% - 10px);
+}
+
+.schedule-active-card {
+    flex: 1;
+    min-height: 0;        /* don't let content drive the flex-line height */
+    overflow: hidden;     /* clip so content can't push the card taller */
+    display: flex;
+    flex-direction: column;
+}
+
+.schedule-active-card #schedules-list {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    display: grid;
+    align-content: start;
+    gap: 10px;
+}
+
+@media (max-width: 968px) {
+    .schedule-row {
+        flex-direction: column;
+    }
+    .schedule-form-card {
+        width: 100%;
+    }
+}
+
 .card {
     background: #2d2d44;
     border-radius: 12px;
