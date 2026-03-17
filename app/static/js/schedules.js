@@ -13,9 +13,11 @@ async function loadSchedules() {
             return;
         }
 
-        // Sort schedules by next_check time (soonest first)
-        // For schedules without next_check, use start_time
+        // Sort schedules: active first by next_check, paused always at bottom
         schedules.sort((a, b) => {
+            if (a.paused && !b.paused) return 1;
+            if (!a.paused && b.paused) return -1;
+
             // Helper function to get sortable timestamp
             const getSortTime = (sched) => {
                 // If next_check exists, use it (it's already calculated by backend)
@@ -86,7 +88,10 @@ async function loadSchedules() {
             let statusColor = '#666';
             let statusText = sched.status;
 
-            if (sched.status === 'active') {
+            if (sched.paused) {
+                statusColor = '#888';
+                statusText = 'paused';
+            } else if (sched.status === 'active') {
                 statusColor = '#28a745';
                 const nextCheck = sched.next_check ? formatRFC2822(sched.next_check) : 'Pending window';
                 statusText = `${sched.status} (Next check: ${nextCheck})`;
@@ -115,6 +120,7 @@ async function loadSchedules() {
                     </div>
                     <div style="display: flex; flex-direction: column; gap: 5px;">
                         <button class="btn btn-secondary" style="width: auto; padding: 5px 10px; font-size: 0.8rem; background: #7e8ce0;" onclick='editSchedule(${JSON.stringify(sched)})'>EDIT</button>
+                        <button class="btn btn-secondary" style="width: auto; padding: 5px 10px; font-size: 0.8rem; background: ${sched.paused ? '#28a745' : '#e09820'};" onclick="pauseSchedule('${sched.id}', this)">${sched.paused ? 'UNPAUSE' : 'PAUSE'}</button>
                         <button class="btn btn-secondary" style="width: auto; padding: 5px 10px; font-size: 0.8rem; background: #dc3545;" onclick="deleteSchedule('${sched.id}', this)">DELETE</button>
                     </div>
                 </div>
@@ -239,6 +245,24 @@ async function addSchedule() {
         }
     } catch (error) {
         showStatus(statusBox, 'Error: ' + error.message, 'error');
+    }
+}
+
+async function pauseSchedule(id, btn) {
+    try {
+        btn.disabled = true;
+        const response = await fetch(`/api/schedules/${id}/pause`, { method: 'POST' });
+        const data = await response.json();
+
+        if (data.success) {
+            loadSchedules();
+        } else {
+            alert('Error: ' + data.error);
+            btn.disabled = false;
+        }
+    } catch (error) {
+        console.error(error);
+        btn.disabled = false;
     }
 }
 

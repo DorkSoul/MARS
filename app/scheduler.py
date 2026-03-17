@@ -171,11 +171,31 @@ class Scheduler:
 
         return False
 
+    def pause_schedule(self, schedule_id):
+        """Toggle the paused state of a schedule."""
+        with self.lock:
+            for schedule in self.schedules:
+                if schedule['id'] == schedule_id:
+                    currently_paused = schedule.get('paused', False)
+                    schedule['paused'] = not currently_paused
+                    if schedule['paused']:
+                        schedule['status'] = 'paused'
+                    else:
+                        # Resuming — recalculate next check and set pending
+                        schedule['status'] = 'pending'
+                        self._update_next_check(schedule)
+                    self._mark_dirty()
+                    self.save_schedules()
+                    logger.info(f"Schedule {schedule_id} {'paused' if schedule['paused'] else 'unpaused'}")
+                    return schedule
+        return None
+
     def get_schedules(self):
-        """Get all schedules, sorted by next_check time"""
+        """Get all schedules — active schedules sorted by next_check, paused schedules at the bottom."""
         sorted_schedules = sorted(
             self.schedules,
             key=lambda s: (
+                s.get('paused', False),        # paused go last
                 s.get('next_check') is None,
                 s.get('next_check') or ''
             )
@@ -192,6 +212,8 @@ class Scheduler:
         with self.lock:
             count = 0
             for schedule in self.schedules:
+                if schedule.get('paused', False):
+                    continue  # don't disturb paused schedules
                 schedule['status'] = 'pending'
                 schedule['active_browser_id'] = None
                 schedule['manual_stop'] = False
@@ -241,6 +263,10 @@ class Scheduler:
 
         with self.lock:
             for schedule in self.schedules:
+                # Skip paused schedules entirely
+                if schedule.get('paused', False):
+                    continue
+
                 if schedule['status'] == 'completed' and not schedule.get('daily'):
                     continue
 
