@@ -46,6 +46,58 @@ header p {
     }
 }
 
+/* Schedule row — spans both grid columns.
+   The form card (left) sizes to its own content and drives the row height.
+   The active-schedules card (right) is position:absolute so it never
+   contributes to the row height — it just pins to top/bottom of the wrapper,
+   matching the form card exactly, and scrolls internally when full. */
+.schedule-row {
+    grid-column: 1 / -1;
+    position: relative;   /* establishes containing block for the abs-pos card */
+    display: flex;
+    align-items: flex-start;
+    gap: 20px;
+}
+
+.schedule-form-card {
+    flex: none;
+    width: calc(50% - 10px);
+}
+
+.schedule-active-card {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    right: 0;
+    width: calc(50% - 10px);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.schedule-active-card #schedules-list {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    display: grid;
+    align-content: start;
+    gap: 10px;
+}
+
+@media (max-width: 968px) {
+    .schedule-row {
+        flex-direction: column;
+    }
+    .schedule-form-card {
+        width: 100%;
+    }
+    .schedule-active-card {
+        position: static;
+        width: 100%;
+        max-height: 50vh;
+    }
+}
+
 .card {
     background: #2d2d44;
     border-radius: 12px;

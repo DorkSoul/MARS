@@ -2,6 +2,7 @@
 const AppState = {
     currentBrowserId: null,
     statusCheckInterval: null,
+    statusEventSource: null,   // SSE EventSource for browser status updates
     countdownInterval: null,
     countdownValue: 15,
     debugLogContent: '',

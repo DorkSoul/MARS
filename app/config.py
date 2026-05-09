@@ -16,6 +16,10 @@ class Config:
         # Schedules
         self.SCHEDULES_FILE = os.path.join(self.CHROME_USER_DATA_DIR, 'schedules.json')
 
+        # Logs / history
+        self.LOGS_DIR = '/app/logs'
+        self.HISTORY_FILE = os.path.join(self.LOGS_DIR, 'download_history.json')
+
         # Chrome paths
         self.CHROMEDRIVER_PATH = '/usr/local/bin/chromedriver'
         self.CHROMEDRIVER_LOG_PATH = '/app/logs/chromedriver.log'
@@ -48,6 +52,7 @@ class Config:
         """Ensure required directories exist"""
         os.makedirs(self.DOWNLOAD_DIR, exist_ok=True)
         os.makedirs(self.CHROME_USER_DATA_DIR, exist_ok=True)
+        os.makedirs(self.LOGS_DIR, exist_ok=True)
 
     def log_startup_info(self, logger):
         """Log startup information"""

@@ -96,6 +96,23 @@ def init_scheduler_routes(scheduler):
             logger.error(f"Error updating schedule: {e}")
             return jsonify({'error': str(e)}), 500
 
+    @scheduler_bp.route('/<schedule_id>/pause', methods=['POST'])
+    def pause_schedule(schedule_id):
+        """Toggle the paused state of a schedule"""
+        try:
+            updated = scheduler.pause_schedule(schedule_id)
+            if updated:
+                return jsonify({
+                    'success': True,
+                    'schedule': updated,
+                    'paused': updated.get('paused', False)
+                })
+            else:
+                return jsonify({'error': 'Schedule not found'}), 404
+        except Exception as e:
+            logger.error(f"Error toggling pause for schedule {schedule_id}: {e}")
+            return jsonify({'error': str(e)}), 500
+
     @scheduler_bp.route('/refresh', methods=['POST'])
     def refresh_schedules():
         """Force refresh all schedule next_check times"""

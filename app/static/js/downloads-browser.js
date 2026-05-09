@@ -250,86 +250,107 @@ async function pollDirectDownloadStatus(browserId) {
     checkStatus();
 }
 
-// Poll browser status
-function startStatusPolling() {
-    if (AppState.statusCheckInterval) {
-        clearInterval(AppState.statusCheckInterval);
+// Handle a browser status data payload (shared by SSE and polling fallback)
+function handleBrowserStatus(data) {
+    // Show stream selection modal if streams are available and manual mode
+    if (data.awaiting_resolution_selection && data.available_resolutions && data.available_resolutions.length > 0) {
+        console.log('=== AVAILABLE STREAMS ===', data.available_resolutions.length);
+
+        const vncContainer = document.getElementById('vnc-container');
+        if (!vncContainer.classList.contains('active')) {
+            const vncFrame = document.getElementById('vnc-frame');
+            const vncUrl = 'http://' + window.location.hostname + ':6080/vnc.html?autoconnect=true&resize=scale';
+            vncFrame.src = vncUrl;
+            vncContainer.classList.add('active');
+            setTimeout(() => {
+                vncContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 500);
+        }
+
+        showStreamModal(data.available_resolutions);
+
+        const statusBox = document.getElementById('browser-status');
+        showStatus(statusBox, `✓ Found ${data.available_resolutions.length} streams - Select one to download`, 'success');
     }
 
+    // Handle download started (both auto and manual)
+    if (data.download_started && !AppState.downloadPopupShown) {
+        AppState.downloadPopupShown = true;
+        const statusBox = document.getElementById('browser-status');
+        showStatus(statusBox, '✓ Download started!', 'success');
+        showDownloadStartedPopup(data.selected_stream_metadata, data.thumbnail);
+        setTimeout(() => loadDownloads(), 2000);
+    }
+
+    if (!data.is_running) {
+        console.log('Browser stopped');
+        stopStatusPolling();
+
+        const btn = document.getElementById('browser-start-btn');
+        btn.disabled = false;
+        btn.innerHTML = 'Open Browser & Detect';
+
+        const vncContainer = document.getElementById('vnc-container');
+        vncContainer.classList.remove('active');
+
+        AppState.currentBrowserId = null;
+        loadDownloads();
+    }
+}
+
+// Stop any active status polling or SSE connection
+function stopStatusPolling() {
+    if (AppState.statusCheckInterval) {
+        clearInterval(AppState.statusCheckInterval);
+        AppState.statusCheckInterval = null;
+    }
+    if (AppState.statusEventSource) {
+        AppState.statusEventSource.close();
+        AppState.statusEventSource = null;
+    }
+}
+
+// Start browser status updates via SSE, with polling fallback
+function startStatusPolling() {
+    stopStatusPolling();
+
+    const browserId = AppState.currentBrowserId;
+
+    if (typeof EventSource !== 'undefined') {
+        const evtSource = new EventSource(`/api/events/browser/${browserId}`);
+        AppState.statusEventSource = evtSource;
+
+        evtSource.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                console.log('=== BROWSER STATUS UPDATE (SSE) ===', data.is_running, data.download_started);
+                handleBrowserStatus(data);
+            } catch (e) {
+                console.error('SSE parse error:', e);
+            }
+        };
+
+        evtSource.onerror = () => {
+            console.warn('SSE connection failed, falling back to polling');
+            evtSource.close();
+            AppState.statusEventSource = null;
+            _startPollingFallback(browserId);
+        };
+    } else {
+        _startPollingFallback(browserId);
+    }
+}
+
+// Polling fallback when SSE is unavailable or fails
+function _startPollingFallback(browserId) {
     AppState.statusCheckInterval = setInterval(async () => {
         if (!AppState.currentBrowserId) return;
 
         try {
-            const response = await fetch(`/api/browser/status/${AppState.currentBrowserId}`);
+            const response = await fetch(`/api/browser/status/${browserId}`);
             const data = await response.json();
-
-            // DEBUG: Log status data
-            console.log('=== BROWSER STATUS UPDATE ===');
-            console.log('Browser ID:', AppState.currentBrowserId);
-            console.log('Is Running:', data.is_running);
-            console.log('Download Started:', data.download_started);
-            console.log('Detected Streams Count:', data.detected_streams);
-            console.log('Awaiting Resolution Selection:', data.awaiting_resolution_selection);
-
-            // Show stream selection modal if streams are available and manual mode
-            if (data.awaiting_resolution_selection && data.available_resolutions && data.available_resolutions.length > 0) {
-                console.log('=== AVAILABLE STREAMS ===');
-                console.log('Count:', data.available_resolutions.length);
-
-                data.available_resolutions.forEach((res, index) => {
-                    console.log(`--- Stream ${index + 1} ---`);
-                    console.log('Name:', res.name);
-                    console.log('Resolution:', res.resolution);
-                    console.log('Framerate:', res.framerate);
-                });
-
-                // Show VNC browser if not already shown (needed for manual selection)
-                const vncContainer = document.getElementById('vnc-container');
-                if (!vncContainer.classList.contains('active')) {
-                    const vncFrame = document.getElementById('vnc-frame');
-                    const vncUrl = 'http://' + window.location.hostname + ':6080/vnc.html?autoconnect=true&resize=scale';
-                    vncFrame.src = vncUrl;
-                    vncContainer.classList.add('active');
-                    setTimeout(() => {
-                        vncContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    }, 500);
-                }
-
-                // Show modal with all available streams
-                showStreamModal(data.available_resolutions);
-
-                const statusBox = document.getElementById('browser-status');
-                showStatus(statusBox, `✓ Found ${data.available_resolutions.length} streams - Select one to download`, 'success');
-            }
-
-            // Handle download started (both auto and manual)
-            if (data.download_started && !AppState.downloadPopupShown) {
-                console.log('✓ Download started');
-                AppState.downloadPopupShown = true;
-                const statusBox = document.getElementById('browser-status');
-                showStatus(statusBox, '✓ Download started!', 'success');
-
-                // Show download confirmation popup
-                showDownloadStartedPopup(data.selected_stream_metadata, data.thumbnail);
-
-                setTimeout(() => loadDownloads(), 2000);
-            }
-
-            if (!data.is_running) {
-                console.log('!!! BROWSER STOPPED !!!');
-                clearInterval(AppState.statusCheckInterval);
-
-                // Reset button and hide VNC
-                const btn = document.getElementById('browser-start-btn');
-                btn.disabled = false;
-                btn.innerHTML = 'Open Browser & Detect';
-
-                const vncContainer = document.getElementById('vnc-container');
-                vncContainer.classList.remove('active');
-
-                AppState.currentBrowserId = null;
-                loadDownloads();
-            }
+            console.log('=== BROWSER STATUS UPDATE (poll) ===', data.is_running, data.download_started);
+            handleBrowserStatus(data);
         } catch (error) {
             console.error('Status check error:', error);
         }

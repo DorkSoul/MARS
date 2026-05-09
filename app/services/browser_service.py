@@ -152,11 +152,8 @@ class BrowserService:
                 except Exception as e:
                     logger.warning(f"Error closing browser {bid}: {e}")
 
-        # Wait for Chrome processes to fully terminate
-        time.sleep(2)
-
-        # Check if Chrome processes are still running
-        max_wait = 10  # Maximum 10 seconds to wait
+        # Poll for Chrome to exit — no unconditional sleep upfront
+        max_wait = 8  # Maximum 8 seconds to wait
         wait_count = 0
 
         while wait_count < max_wait:
@@ -181,8 +178,8 @@ class BrowserService:
                 logger.debug(f"Error checking Chrome processes: {e}")
                 break
 
-        # Add a few extra seconds buffer to be absolutely sure
-        time.sleep(3)
+        # Short buffer to let OS fully release any file locks
+        time.sleep(1)
         logger.info("Chrome ready to launch")
 
     def _launch_browser_internal(self, url, browser_id, resolution='1080p', framerate='any', auto_download=False, filename=None, output_format='mp4'):
