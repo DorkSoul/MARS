@@ -300,6 +300,7 @@ class Scheduler:
                                     logger.info(f"Download {active_browser_id} stopped for schedule {schedule['id']}, resuming stream checks")
                                     schedule['status'] = 'active'
                                     schedule['active_browser_id'] = None
+                                    schedule['next_check'] = None  # re-check immediately on next tick
 
                             if schedule['status'] != 'active':
                                 next_check_val = schedule.get('next_check')
@@ -374,6 +375,7 @@ class Scheduler:
                     logger.info(f"Download {active_browser_id} stopped for schedule {schedule['id']}, resuming stream checks")
                     schedule['status'] = 'active'
                     schedule['active_browser_id'] = None
+                    schedule['next_check'] = None  # re-check immediately on next tick
 
             if schedule['status'] != 'active':
                 next_check_val = schedule.get('next_check')
@@ -501,24 +503,24 @@ class Scheduler:
         Check if a specific download is still active.
 
         Returns True if the download exists in the queue and has no completed_at.
+        Uses get_download_status (which holds _queue_lock) to avoid a TOCTOU race.
         """
         try:
             if not browser_id:
                 return False
 
-            download_queue = self.browser_service.download_service.download_queue
+            dl_status = self.browser_service.download_service.get_download_status(browser_id)
 
-            if browser_id in download_queue:
-                download_info = download_queue[browser_id]
-                is_active = 'completed_at' not in download_info
-                if is_active:
-                    logger.debug(f"Download {browser_id} is still active")
-                else:
-                    logger.debug(f"Download {browser_id} has completed")
-                return is_active
-            else:
+            if dl_status is None:
                 logger.debug(f"Download {browser_id} not found in queue")
                 return False
+
+            is_active = not dl_status.get('completed', False)
+            if is_active:
+                logger.debug(f"Download {browser_id} is still active")
+            else:
+                logger.debug(f"Download {browser_id} has completed")
+            return is_active
 
         except Exception as e:
             logger.error(f"Error checking download status for {browser_id}: {e}")
@@ -597,11 +599,19 @@ class Scheduler:
 
                 time.sleep(1)
 
-            # If no download started, revert to 'active' so next window check can retry
+            # Loop exited without detecting a download in the polling window.
+            # Check download_queue directly — the download callback may have fired
+            # just before the browser was closed externally (e.g. by _ensure_chrome_closed
+            # launching the next queued browser), causing the poll loop to miss it.
             with self.lock:
                 for s in self.schedules:
                     if s['id'] == schedule['id'] and s.get('status') == 'checking':
-                        s['status'] = 'active'
+                        if self._is_download_active(browser_id):
+                            logger.info(f"Download {browser_id} found after loop exit for schedule {schedule['id']}, marking as started")
+                            s['status'] = 'download_started'
+                            s['active_browser_id'] = browser_id
+                        else:
+                            s['status'] = 'active'
                         self._mark_dirty()
                         break
 
@@ -610,11 +620,15 @@ class Scheduler:
 
         except Exception as e:
             logger.error(f"Error in browser check task: {e}")
-            # Revert checking status on error
             with self.lock:
                 for s in self.schedules:
                     if s['id'] == schedule['id'] and s.get('status') == 'checking':
-                        s['status'] = 'active'
+                        if self._is_download_active(browser_id):
+                            logger.info(f"Download {browser_id} found after error for schedule {schedule['id']}, marking as started")
+                            s['status'] = 'download_started'
+                            s['active_browser_id'] = browser_id
+                        else:
+                            s['status'] = 'active'
                         self._mark_dirty()
                         break
             try:
