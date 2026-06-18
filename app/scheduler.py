@@ -87,15 +87,33 @@ class Scheduler:
         return datetime.now(tz) if tz else datetime.now()
 
     def _parse_dt(self, dt_str, tz):
-        """Parse an ISO datetime string and attach timezone if provided."""
+        """Parse an ISO datetime string and attach timezone if provided.
+        If the string already carries a UTC offset (e.g. from _store_dt), return it
+        aware so Python can compare two aware datetimes directly.  When the schedule
+        has no timezone and we would otherwise compare aware vs naive, strip the tz
+        so both sides stay naive-UTC."""
         dt = datetime.fromisoformat(dt_str)
-        if tz and dt.tzinfo is None:
-            dt = dt.replace(tzinfo=tz)
+        if dt.tzinfo is None:
+            if tz:
+                dt = dt.replace(tzinfo=tz)
+            # else: remains naive UTC — matches _now() for no-tz schedules
+        elif tz is None:
+            # Stored with Z (UTC-aware) but schedule has no timezone — strip so
+            # comparison with naive _now() doesn't raise TypeError
+            dt = dt.replace(tzinfo=None)
         return dt
 
     def _strip_tz(self, dt):
         """Strip timezone for storage (timezone is persisted separately)."""
         return dt.replace(tzinfo=None) if dt.tzinfo else dt
+
+    def _store_dt(self, dt):
+        """Serialize a datetime to UTC ISO with Z suffix for next_check storage.
+        JavaScript Date() correctly converts UTC+Z to the browser's local timezone."""
+        if dt.tzinfo is not None:
+            return dt.astimezone(ZoneInfo('UTC')).strftime('%Y-%m-%dT%H:%M:%SZ')
+        # Naive datetime — container runs UTC, so treat as UTC
+        return dt.isoformat() + 'Z'
 
     # ── CRUD ──────────────────────────────────────────────────────
 
@@ -186,10 +204,14 @@ class Scheduler:
                             logger.info(f"Moving daily schedule {schedule_id} to next day")
                             start_time_str = schedule['start_time']
                             start_hour, start_min = map(int, start_time_str.split(':'))
-                            now = datetime.now()
-                            tomorrow = now.date() + timedelta(days=1)
-                            next_start = datetime.combine(tomorrow, datetime.min.time().replace(hour=start_hour, minute=start_min))
-                            schedule['next_check'] = next_start.isoformat()
+                            tz = self._get_tz(schedule)
+                            now_local = self._now(schedule)
+                            tomorrow = now_local.date() + timedelta(days=1)
+                            if tz:
+                                next_start = datetime.combine(tomorrow, dtime(start_hour, start_min), tzinfo=tz)
+                            else:
+                                next_start = datetime.combine(tomorrow, dtime(start_hour, start_min))
+                            schedule['next_check'] = self._store_dt(next_start)
                             logger.info(f"Daily schedule {schedule_id} moved to {next_start}")
                         elif schedule.get('repeat'):
                             logger.info(f"Moving weekly schedule {schedule_id} to next week")
@@ -498,7 +520,7 @@ class Scheduler:
         now = self._now(schedule)
 
         def _store(dt):
-            return self._strip_tz(dt).isoformat()
+            return self._store_dt(dt)
 
         if schedule.get('daily'):
             start_time_str = schedule['start_time']
