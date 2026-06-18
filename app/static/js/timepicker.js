@@ -69,6 +69,7 @@ class TimePicker {
                 <button type="button" class="tp-mode-btn" id="${id}__mn">MIN</button>
             </div>
             <div class="tp-clock" id="${id}__clock"></div>`;
+        pop.addEventListener('click', e => e.stopPropagation());
         this._pop = pop;
         this.container.appendChild(pop);
         this._syncDigits();
@@ -98,7 +99,7 @@ class TimePicker {
         document.removeEventListener('click', this._outsideClick);
     }
 
-    _onOutside(e) { if (!this.container.contains(e.target)) this._close(); }
+    _onOutside(e) { this._close(); }
 
     _d(i) { return document.getElementById(`${this.containerId}__d${i}`); }
 
