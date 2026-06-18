@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 browser_bp = Blueprint('browser', __name__, url_prefix='/api/browser')
 
 
-def init_browser_routes(browser_service, download_service, config):
+def init_browser_routes(browser_service, download_service, config, scheduler=None):
     """Initialize browser routes with services"""
 
     @browser_bp.route('/start', methods=['POST'])
@@ -40,6 +40,8 @@ def init_browser_routes(browser_service, download_service, config):
             )
 
             if success:
+                if scheduler:
+                    scheduler.pause_all_for_manual(browser_id)
                 return jsonify({
                     'success': True,
                     'browser_id': browser_id,
@@ -86,6 +88,8 @@ def init_browser_routes(browser_service, download_service, config):
         """Close browser manually"""
         try:
             if browser_service.close_browser(browser_id):
+                if scheduler:
+                    scheduler.resume_after_manual(browser_id)
                 return jsonify({'success': True, 'message': 'Browser closed'})
             else:
                 return jsonify({'error': 'Browser not found'}), 404

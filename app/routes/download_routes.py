@@ -151,6 +151,9 @@ def init_download_routes(download_service, download_dir, scheduler=None):
                 filename
             )
 
+            if scheduler:
+                scheduler.pause_all_for_manual(browser_id)
+
             return jsonify({
                 'success': True,
                 'browser_id': browser_id,
@@ -241,10 +244,12 @@ def init_download_routes(download_service, download_dir, scheduler=None):
         """Stop an active download"""
         try:
             if download_service.stop_download(browser_id):
-                # If this is a scheduled download, move it to the next time slot
-                if scheduler and browser_id.startswith('sched_'):
-                    scheduler.move_to_next_slot(browser_id)
-                    logger.info(f"Moved scheduled download {browser_id} to next time slot")
+                if scheduler:
+                    if browser_id.startswith('sched_'):
+                        scheduler.move_to_next_slot(browser_id)
+                        logger.info(f"Moved scheduled download {browser_id} to next time slot")
+                    else:
+                        scheduler.resume_after_manual(browser_id)
 
                 return jsonify({'success': True, 'message': 'Download stopped'})
             else:

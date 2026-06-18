@@ -31,6 +31,7 @@ class Scheduler:
         self.thread = None
         self.lock = threading.Lock()
         self._dirty = False  # True when in-memory schedules differ from disk
+        self._auto_paused = {}  # browser_id -> [schedule_ids paused for that manual session]
 
         self.load_schedules()
 
@@ -223,6 +224,37 @@ class Scheduler:
                     logger.info(f"Schedule {schedule_id} {'paused' if schedule['paused'] else 'unpaused'}")
                     return schedule
         return None
+
+    def pause_all_for_manual(self, browser_id):
+        """Pause all non-paused schedules while a manual download is active."""
+        paused_ids = []
+        with self.lock:
+            for schedule in self.schedules:
+                if not schedule.get('paused', False):
+                    schedule['paused'] = True
+                    schedule['status'] = 'paused'
+                    paused_ids.append(schedule['id'])
+            if paused_ids:
+                self._auto_paused[browser_id] = paused_ids
+                self._mark_dirty()
+                self.save_schedules()
+        if paused_ids:
+            logger.info(f"Auto-paused {len(paused_ids)} schedule(s) for manual session {browser_id}")
+
+    def resume_after_manual(self, browser_id):
+        """Resume schedules that were auto-paused for a manual session."""
+        ids_to_resume = self._auto_paused.pop(browser_id, [])
+        if not ids_to_resume:
+            return
+        with self.lock:
+            for schedule in self.schedules:
+                if schedule['id'] in ids_to_resume:
+                    schedule['paused'] = False
+                    schedule['status'] = 'pending'
+                    self._update_next_check(schedule)
+            self._mark_dirty()
+            self.save_schedules()
+        logger.info(f"Auto-resumed {len(ids_to_resume)} schedule(s) after manual session {browser_id}")
 
     def get_schedules(self):
         """Get all schedules — active schedules sorted by next_check, paused schedules at the bottom."""

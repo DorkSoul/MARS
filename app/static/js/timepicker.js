@@ -75,7 +75,22 @@ class TimePicker {
         this._hookDigits();
         this._hookModes();
         this._drawClock();
+        requestAnimationFrame(() => this._reposition());
         setTimeout(() => document.addEventListener('click', this._outsideClick), 0);
+    }
+
+    _reposition() {
+        if (!this._pop) return;
+        const rect = this._pop.getBoundingClientRect();
+        const vw = window.innerWidth;
+        if (rect.right > vw - 8) {
+            this._pop.style.left = 'auto';
+            this._pop.style.right = '0';
+            this._pop.style.transform = 'none';
+        } else if (rect.left < 8) {
+            this._pop.style.left = '0';
+            this._pop.style.transform = 'none';
+        }
     }
 
     _close() {

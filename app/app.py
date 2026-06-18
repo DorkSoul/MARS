@@ -30,7 +30,7 @@ def create_app():
     browser_service.check_chrome_installation()
 
     # Initialize and register routes (pass config to browser routes for test endpoint)
-    browser_bp = init_browser_routes(browser_service, download_service, config)
+    browser_bp = init_browser_routes(browser_service, download_service, config, scheduler)
     download_bp = init_download_routes(download_service, config.DOWNLOAD_DIR, scheduler)
     scheduler_bp = init_scheduler_routes(scheduler)
     events_bp = init_events_routes(browser_service, download_service)
