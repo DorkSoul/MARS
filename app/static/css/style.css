@@ -575,3 +575,139 @@ select option {
 .stream-download-btn:active {
     background: #5664b2;
 }
+
+/* ── Time Picker ──────────────────────────────────────────── */
+.tp-widget {
+    position: relative;
+    display: inline-block;
+    width: 100%;
+}
+
+.tp-display {
+    width: 100%;
+    padding: 12px;
+    background: #1e1e30;
+    border: 2px solid #4a4a6a;
+    border-radius: 8px;
+    color: #e0e0e0;
+    font-size: 1.15rem;
+    font-weight: 700;
+    letter-spacing: 2px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1px;
+    transition: border-color 0.3s;
+}
+
+.tp-display:hover,
+.tp-display:focus {
+    outline: none;
+    border-color: #7e8ce0;
+}
+
+.tp-sep {
+    color: #7e8ce0;
+    font-size: 1.3rem;
+}
+
+.tp-popover {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: #2d2d44;
+    border: 1px solid #4a4a6a;
+    border-radius: 12px;
+    padding: 14px 16px 16px;
+    z-index: 9999;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.7);
+    min-width: 252px;
+}
+
+.tp-digits {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    margin-bottom: 10px;
+}
+
+.tp-d {
+    width: 42px;
+    height: 50px;
+    background: #1e1e30;
+    border: 2px solid #4a4a6a;
+    border-radius: 8px;
+    color: #e0e0e0;
+    font-size: 1.4rem;
+    font-weight: 700;
+    text-align: center;
+    transition: border-color 0.2s;
+    caret-color: transparent;
+}
+
+.tp-d:focus {
+    outline: none;
+    border-color: #7e8ce0;
+}
+
+.tp-dsep {
+    color: #7e8ce0;
+    font-size: 1.6rem;
+    font-weight: 700;
+    line-height: 1;
+    margin: 0 2px;
+    user-select: none;
+}
+
+.tp-modes {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 10px;
+}
+
+.tp-mode-btn {
+    flex: 1;
+    padding: 5px 0;
+    background: #1e1e30;
+    border: 1px solid #4a4a6a;
+    border-radius: 6px;
+    color: #b8b8d1;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s, border-color 0.2s;
+}
+
+.tp-mode-btn.active {
+    background: #7e8ce0;
+    border-color: #7e8ce0;
+    color: #fff;
+}
+
+.tp-clock {
+    display: flex;
+    justify-content: center;
+}
+
+/* Date + time side-by-side */
+.datetime-picker-group {
+    display: flex;
+    gap: 8px;
+    align-items: stretch;
+}
+
+.datetime-picker-group .date-input {
+    flex: 1;
+    min-width: 0;
+    width: auto;
+    color-scheme: dark;
+}
+
+.datetime-picker-group .tp-widget {
+    width: auto;
+    flex-shrink: 0;
+}
