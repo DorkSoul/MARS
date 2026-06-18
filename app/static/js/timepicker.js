@@ -37,7 +37,7 @@ class TimePicker {
         this._btn = document.createElement('button');
         this._btn.type = 'button';
         this._btn.className = 'tp-display';
-        this._btn.addEventListener('click', e => { e.stopPropagation(); this._toggle(); });
+        this._btn.addEventListener('click', () => this._toggle());
         this.container.appendChild(this._btn);
         this._refreshBtn();
     }
