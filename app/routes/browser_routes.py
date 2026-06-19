@@ -34,14 +34,18 @@ def init_browser_routes(browser_service, download_service, config, scheduler=Non
             # Generate browser ID
             browser_id = f"browser_{int(time.time())}"
 
+            # Block scheduled checks BEFORE starting so the browser service
+            # queue processor drops in-flight scheduled launches immediately
+            if scheduler:
+                scheduler.pause_all_for_manual(browser_id)
+            browser_service.set_manual_active(True)
+
             # Start browser
             success, detector = browser_service.start_browser(
                 url, browser_id, resolution, framerate, auto_download, filename, output_format
             )
 
             if success:
-                if scheduler:
-                    scheduler.pause_all_for_manual(browser_id)
                 return jsonify({
                     'success': True,
                     'browser_id': browser_id,
@@ -49,6 +53,10 @@ def init_browser_routes(browser_service, download_service, config, scheduler=Non
                     'vnc_url': f'/vnc'
                 })
             else:
+                # Roll back manual lock on failure
+                if scheduler:
+                    scheduler.resume_after_manual(browser_id)
+                browser_service.set_manual_active(False)
                 return jsonify({'error': 'Failed to start browser'}), 500
 
         except Exception as e:
@@ -88,6 +96,7 @@ def init_browser_routes(browser_service, download_service, config, scheduler=Non
         """Close browser manually"""
         try:
             if browser_service.close_browser(browser_id):
+                browser_service.set_manual_active(False)
                 if scheduler:
                     scheduler.resume_after_manual(browser_id)
                 return jsonify({'success': True, 'message': 'Browser closed'})

@@ -45,6 +45,9 @@ class Scheduler:
 
                 # Ensure all schedules have next_check calculated
                 for schedule in self.schedules:
+                    # Clear in-memory-only auto_paused flag that may have been
+                    # left over if a previous session ended without calling close
+                    schedule.pop('auto_paused', None)
                     if not schedule.get('next_check'):
                         self._update_next_check(schedule)
 
@@ -248,34 +251,31 @@ class Scheduler:
         return None
 
     def pause_all_for_manual(self, browser_id):
-        """Pause all non-paused schedules while a manual download is active."""
+        """Mark all active schedules as auto_paused (in memory only — never persisted).
+        Called BEFORE the manual browser starts so the scheduler stops queuing checks."""
         paused_ids = []
         with self.lock:
             for schedule in self.schedules:
-                if not schedule.get('paused', False):
-                    schedule['paused'] = True
-                    schedule['status'] = 'paused'
+                if not schedule.get('paused', False) and not schedule.get('auto_paused', False):
+                    schedule['auto_paused'] = True
                     paused_ids.append(schedule['id'])
             if paused_ids:
                 self._auto_paused[browser_id] = paused_ids
-                self._mark_dirty()
-                self.save_schedules()
         if paused_ids:
             logger.info(f"Auto-paused {len(paused_ids)} schedule(s) for manual session {browser_id}")
 
     def resume_after_manual(self, browser_id):
-        """Resume schedules that were auto-paused for a manual session."""
+        """Lift auto_paused flag for schedules held for a manual session."""
         ids_to_resume = self._auto_paused.pop(browser_id, [])
         if not ids_to_resume:
             return
         with self.lock:
             for schedule in self.schedules:
-                if schedule['id'] in ids_to_resume:
-                    schedule['paused'] = False
-                    schedule['status'] = 'pending'
-                    self._update_next_check(schedule)
-            self._mark_dirty()
-            self.save_schedules()
+                if schedule['id'] in ids_to_resume and schedule.get('auto_paused'):
+                    del schedule['auto_paused']
+                    if not schedule.get('paused', False):
+                        schedule['status'] = 'pending'
+                        self._update_next_check(schedule)
         logger.info(f"Auto-resumed {len(ids_to_resume)} schedule(s) after manual session {browser_id}")
 
     def get_schedules(self):
@@ -349,8 +349,8 @@ class Scheduler:
         """Check all schedules and run tasks if needed"""
         with self.lock:
             for schedule in self.schedules:
-                # Skip paused schedules entirely
-                if schedule.get('paused', False):
+                # Skip paused schedules (user-paused or auto-paused for manual session)
+                if schedule.get('paused', False) or schedule.get('auto_paused', False):
                     continue
 
                 if schedule['status'] == 'completed' and not schedule.get('daily'):

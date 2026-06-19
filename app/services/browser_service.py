@@ -24,6 +24,8 @@ class BrowserService:
         self.queue_running = False
         self.queue_lock = threading.Lock()
 
+        self._manual_active = False  # set True while a manual session is running
+
         # Start queue processor
         self._start_queue_processor()
 
@@ -79,6 +81,11 @@ class BrowserService:
         self.queue_processor_thread.start()
         logger.info("Browser queue processor started")
 
+    def set_manual_active(self, active: bool):
+        """Signal whether a manual browser/download session is in progress."""
+        self._manual_active = active
+        logger.info(f"Manual session {'started' if active else 'ended'}")
+
     def _process_browser_queue(self):
         """Background thread that processes browser launch requests one by one"""
         logger.info("Browser queue processor thread running")
@@ -92,6 +99,16 @@ class BrowserService:
                     continue
 
                 browser_id = request['browser_id']
+
+                # Drop queued scheduled launches while a manual session is active
+                if self._manual_active and browser_id.startswith('sched_'):
+                    logger.info(f"Dropping queued scheduled launch {browser_id} — manual session active")
+                    with self.queue_lock:
+                        self.active_browsers.pop(browser_id, None)
+                    request['result']['success'] = False
+                    request['completion_event'].set()
+                    self.browser_queue.task_done()
+                    continue
 
                 # Update status from 'queued' to 'launching'
                 with self.queue_lock:

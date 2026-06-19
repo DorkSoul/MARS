@@ -144,15 +144,19 @@ def init_download_routes(download_service, download_dir, scheduler=None):
             default_filename = f"{timestamp_str}.mp4"
             filename = data.get('filename', default_filename)
 
+            browser_id = f"direct_{timestamp}"
+
+            # Block scheduled checks before starting the download
+            if scheduler:
+                scheduler.pause_all_for_manual(browser_id)
+                scheduler.browser_service.set_manual_active(True)
+
             # Start download
-            browser_id, output_path = download_service.start_direct_download(
-                f"direct_{timestamp}",
+            _, output_path = download_service.start_direct_download(
+                browser_id,
                 stream_url,
                 filename
             )
-
-            if scheduler:
-                scheduler.pause_all_for_manual(browser_id)
 
             return jsonify({
                 'success': True,
@@ -249,6 +253,7 @@ def init_download_routes(download_service, download_dir, scheduler=None):
                         scheduler.move_to_next_slot(browser_id)
                         logger.info(f"Moved scheduled download {browser_id} to next time slot")
                     else:
+                        scheduler.browser_service.set_manual_active(False)
                         scheduler.resume_after_manual(browser_id)
 
                 return jsonify({'success': True, 'message': 'Download stopped'})
