@@ -613,15 +613,12 @@ select option {
 }
 
 .tp-popover {
-    position: absolute;
-    top: calc(100% + 6px);
-    left: 50%;
-    transform: translateX(-50%);
+    position: fixed;
     background: #2d2d44;
     border: 1px solid #4a4a6a;
     border-radius: 12px;
     padding: 14px 16px 16px;
-    z-index: 9999;
+    z-index: 99999;
     box-shadow: 0 12px 40px rgba(0,0,0,0.7);
     min-width: 252px;
     max-width: calc(100vw - 16px);

@@ -71,7 +71,7 @@ class TimePicker {
             <div class="tp-clock" id="${id}__clock"></div>`;
         pop.addEventListener('click', e => e.stopPropagation());
         this._pop = pop;
-        this.container.appendChild(pop);
+        document.body.appendChild(pop);
         this._syncDigits();
         this._hookDigits();
         this._hookModes();
@@ -82,16 +82,24 @@ class TimePicker {
 
     _reposition() {
         if (!this._pop) return;
-        const rect = this._pop.getBoundingClientRect();
+        const btnRect = this._btn.getBoundingClientRect();
+        const popW = this._pop.offsetWidth;
+        const popH = this._pop.offsetHeight;
         const vw = window.innerWidth;
-        if (rect.right > vw - 8) {
-            this._pop.style.left = 'auto';
-            this._pop.style.right = '0';
-            this._pop.style.transform = 'none';
-        } else if (rect.left < 8) {
-            this._pop.style.left = '0';
-            this._pop.style.transform = 'none';
-        }
+        const vh = window.innerHeight;
+
+        let top = btnRect.bottom + 6;
+        let left = btnRect.left + btnRect.width / 2 - popW / 2;
+
+        // Clamp horizontally
+        if (left + popW > vw - 8) left = vw - popW - 8;
+        if (left < 8) left = 8;
+
+        // Flip above if not enough room below
+        if (top + popH > vh - 8) top = btnRect.top - popH - 6;
+
+        this._pop.style.top = top + 'px';
+        this._pop.style.left = left + 'px';
     }
 
     _close() {
