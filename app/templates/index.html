@@ -198,12 +198,18 @@
 
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
                     <div class="input-group">
-                        <label for="sched-start" id="sched-start-label">Start Time</label>
-                        <input type="datetime-local" id="sched-start">
+                        <label id="sched-start-label">Start Time</label>
+                        <div class="datetime-picker-group" id="sched-start-group">
+                            <input type="date" id="sched-start-date" class="date-input">
+                            <div id="sched-start-time"></div>
+                        </div>
                     </div>
                     <div class="input-group">
-                        <label for="sched-end" id="sched-end-label">End Time</label>
-                        <input type="datetime-local" id="sched-end">
+                        <label id="sched-end-label">End Time</label>
+                        <div class="datetime-picker-group" id="sched-end-group">
+                            <input type="date" id="sched-end-date" class="date-input">
+                            <div id="sched-end-time"></div>
+                        </div>
                     </div>
                 </div>
 
@@ -307,6 +313,7 @@
     <script src="{{ url_for('static', filename='js/validation.js') }}"></script>
     <script src="{{ url_for('static', filename='js/ui.js') }}"></script>
     <script src="{{ url_for('static', filename='js/downloads-browser.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/timepicker.js') }}"></script>
     <script src="{{ url_for('static', filename='js/schedules.js') }}"></script>
     <script src="{{ url_for('static', filename='js/init.js') }}"></script>
 
@@ -409,12 +416,18 @@
 
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
                     <div class="input-group">
-                        <label for="edit-sched-start" id="edit-sched-start-label">Start Time</label>
-                        <input type="datetime-local" id="edit-sched-start">
+                        <label id="edit-sched-start-label">Start Time</label>
+                        <div class="datetime-picker-group" id="edit-sched-start-group">
+                            <input type="date" id="edit-sched-start-date" class="date-input">
+                            <div id="edit-sched-start-time"></div>
+                        </div>
                     </div>
                     <div class="input-group">
-                        <label for="edit-sched-end" id="edit-sched-end-label">End Time</label>
-                        <input type="datetime-local" id="edit-sched-end">
+                        <label id="edit-sched-end-label">End Time</label>
+                        <div class="datetime-picker-group" id="edit-sched-end-group">
+                            <input type="date" id="edit-sched-end-date" class="date-input">
+                            <div id="edit-sched-end-time"></div>
+                        </div>
                     </div>
                 </div>
 

@@ -1,22 +1,7 @@
 // Initialization and event listeners
 
 document.addEventListener('DOMContentLoaded', () => {
-    // Set default schedule times to now and +1 hour
-    const now = new Date();
-    const oneHourLater = new Date(now.getTime() + 60 * 60 * 1000);
-
-    // Format as YYYY-MM-DDTHH:MM for datetime-local input
-    const formatDateTime = (date) => {
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        const hours = String(date.getHours()).padStart(2, '0');
-        const minutes = String(date.getMinutes()).padStart(2, '0');
-        return `${year}-${month}-${day}T${hours}:${minutes}`;
-    };
-
-    document.getElementById('sched-start').value = formatDateTime(now);
-    document.getElementById('sched-end').value = formatDateTime(oneHourLater);
+    initSchedulePickers();
 
     loadDownloads();
     loadSchedules();
