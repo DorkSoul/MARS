@@ -45,9 +45,10 @@ class Scheduler:
 
                 # Ensure all schedules have next_check calculated
                 for schedule in self.schedules:
-                    # Clear in-memory-only auto_paused flag that may have been
-                    # left over if a previous session ended without calling close
+                    # Clear in-memory-only flags that may have been left over
+                    # if a previous session ended without calling close
                     schedule.pop('auto_paused', None)
+                    schedule.pop('quick_recheck', None)
                     if not schedule.get('next_check'):
                         self._update_next_check(schedule)
 
@@ -379,6 +380,7 @@ class Scheduler:
                                     schedule['status'] = 'completed'
                                 schedule['active_browser_id'] = None
                                 schedule['manual_stop'] = False
+                            schedule.pop('quick_recheck', None)
                             continue
 
                         if start_dt <= now <= end_dt:
@@ -390,6 +392,7 @@ class Scheduler:
                                     logger.info(f"Download {active_browser_id} stopped for schedule {schedule['id']}, resuming stream checks")
                                     schedule['status'] = 'active'
                                     schedule['active_browser_id'] = None
+                                    schedule['quick_recheck'] = True
                                     schedule['next_check'] = None  # re-check immediately on next tick
 
                             if schedule['status'] != 'active':
@@ -468,6 +471,7 @@ class Scheduler:
                     logger.info(f"Download {active_browser_id} stopped for schedule {schedule['id']}, resuming stream checks")
                     schedule['status'] = 'active'
                     schedule['active_browser_id'] = None
+                    schedule['quick_recheck'] = True
                     schedule['next_check'] = None  # re-check immediately on next tick
 
             if schedule['status'] != 'active':
@@ -504,6 +508,7 @@ class Scheduler:
                 schedule['last_check'] = None
                 schedule['active_browser_id'] = None
                 schedule['manual_stop'] = False
+                schedule.pop('quick_recheck', None)
                 self._update_next_check(schedule)
 
     def _update_next_check(self, schedule):
@@ -550,7 +555,11 @@ class Scheduler:
                 schedule['next_check'] = _store(start_dt)
                 logger.debug(f"Schedule {schedule['id']}: next check set to window start: {start_dt}")
             elif start_dt <= now <= end_dt:
-                minutes = random.uniform(5, 8)
+                if schedule.get('quick_recheck'):
+                    minutes = random.uniform(1, 2)
+                    logger.debug(f"Schedule {schedule['id']}: quick recheck mode — next check in {minutes:.1f} mins")
+                else:
+                    minutes = random.uniform(5, 8)
                 next_dt = min(now + timedelta(minutes=minutes), end_dt)
                 schedule['next_check'] = _store(next_dt)
                 logger.debug(f"Schedule {schedule['id']}: next check in {minutes:.1f} mins: {next_dt}")
@@ -571,7 +580,11 @@ class Scheduler:
                 schedule['next_check'] = _store(start_dt)
                 logger.debug(f"Schedule {schedule['id']}: next check set to window start: {start_dt}")
             elif start_dt <= now <= end_dt:
-                minutes = random.uniform(5, 8)
+                if schedule.get('quick_recheck'):
+                    minutes = random.uniform(1, 2)
+                    logger.debug(f"Schedule {schedule['id']}: quick recheck mode — next check in {minutes:.1f} mins")
+                else:
+                    minutes = random.uniform(5, 8)
                 next_dt = min(now + timedelta(minutes=minutes), end_dt)
                 schedule['next_check'] = _store(next_dt)
                 logger.debug(f"Schedule {schedule['id']}: next check in {minutes:.1f} mins: {next_dt}")
@@ -689,6 +702,7 @@ class Scheduler:
                             if s['id'] == schedule['id']:
                                 s['status'] = 'download_started'
                                 s['active_browser_id'] = browser_id
+                                s.pop('quick_recheck', None)
                                 self._mark_dirty()
                                 self.save_schedules()
                                 break
