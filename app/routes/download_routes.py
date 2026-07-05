@@ -249,10 +249,7 @@ def init_download_routes(download_service, download_dir, scheduler=None):
         try:
             if download_service.stop_download(browser_id):
                 if scheduler:
-                    if browser_id.startswith('sched_'):
-                        scheduler.move_to_next_slot(browser_id)
-                        logger.info(f"Moved scheduled download {browser_id} to next time slot")
-                    else:
+                    if not browser_id.startswith('sched_'):
                         scheduler.browser_service.set_manual_active(False)
                         scheduler.resume_after_manual(browser_id)
 
