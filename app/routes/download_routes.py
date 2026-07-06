@@ -10,23 +10,39 @@ logger = logging.getLogger(__name__)
 
 download_bp = Blueprint('download', __name__, url_prefix='/api/downloads')
 
-# Cache for file metadata to avoid repeated ffprobe calls
+# Caches for file metadata/thumbnails to avoid repeated ffprobe/ffmpeg calls.
+# Keyed by "path:mtime" so entries invalidate when a file changes; stale keys
+# are evicted on each /list request.
 _metadata_cache = {}
+_thumbnail_cache = {}
 
 
 def init_download_routes(download_service, download_dir, scheduler=None):
     """Initialize download routes with services"""
 
-    def get_file_metadata(filepath):
-        """Extract metadata from a video file using ffprobe"""
+    def resolve_in_download_dir(filename):
+        """Resolve filename inside download_dir; return None if it escapes."""
+        filepath = os.path.realpath(os.path.join(download_dir, filename))
+        base = os.path.realpath(download_dir)
+        if filepath == base or os.path.commonpath([filepath, base]) != base:
+            return None
+        return filepath
+
+    def get_file_metadata(filepath, cache_key=None):
+        """Extract metadata from a video file using ffprobe (cached by path+mtime).
+
+        Failures (including ffprobe timeouts) are cached so a broken file
+        doesn't respawn ffprobe on every poll.
+        """
         try:
-            # Check cache first (use file modification time as cache key)
-            stat = os.stat(filepath)
-            cache_key = f"{filepath}:{stat.st_mtime}"
-            
+            # Check cache first (file modification time as cache key)
+            if cache_key is None:
+                stat = os.stat(filepath)
+                cache_key = f"{filepath}:{stat.st_mtime}"
+
             if cache_key in _metadata_cache:
                 return _metadata_cache[cache_key]
-            
+
             cmd = [
                 'ffprobe',
                 '-v', 'quiet',
@@ -84,18 +100,33 @@ def init_download_routes(download_service, download_dir, scheduler=None):
             
         except Exception as e:
             logger.error(f"Error extracting metadata from {filepath}: {e}")
-            return {'resolution': 'Unknown', 'duration': 0, 'framerate': ''}
+            fallback = {'resolution': 'Unknown', 'duration': 0, 'framerate': ''}
+            if cache_key:
+                _metadata_cache[cache_key] = fallback
+            return fallback
 
-    def get_file_thumbnail(filepath):
-        """Extract thumbnail from a video file"""
+    def get_file_thumbnail(filepath, cache_key=None):
+        """Extract thumbnail from a video file (cached by path+mtime).
+
+        Failures are cached too — including ffmpeg timeouts — so audio-only
+        or corrupt files don't respawn FFmpeg on every poll.
+        """
         import base64
         import tempfile
-        
+
+        tmp_path = None
         try:
+            if cache_key is None:
+                stat = os.stat(filepath)
+                cache_key = f"{filepath}:{stat.st_mtime}"
+
+            if cache_key in _thumbnail_cache:
+                return _thumbnail_cache[cache_key]
+
             # Create temp file for thumbnail
             with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as tmp:
                 tmp_path = tmp.name
-            
+
             cmd = [
                 'ffmpeg',
                 '-i', filepath,
@@ -105,27 +136,33 @@ def init_download_routes(download_service, download_dir, scheduler=None):
                 '-y',
                 tmp_path
             ]
-            
+
             result = subprocess.run(
                 cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 timeout=10
             )
-            
+
+            thumbnail = None
             if result.returncode == 0 and os.path.exists(tmp_path) and os.path.getsize(tmp_path) > 0:
                 with open(tmp_path, 'rb') as f:
                     thumbnail = base64.b64encode(f.read()).decode('utf-8')
-                os.unlink(tmp_path)
-                return thumbnail
-            
-            if os.path.exists(tmp_path):
-                os.unlink(tmp_path)
-            return None
-            
+
+            _thumbnail_cache[cache_key] = thumbnail
+            return thumbnail
+
         except Exception as e:
             logger.error(f"Error extracting thumbnail from {filepath}: {e}")
+            if cache_key:
+                _thumbnail_cache[cache_key] = None
             return None
+        finally:
+            if tmp_path and os.path.exists(tmp_path):
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
 
     @download_bp.route('/direct', methods=['POST'])
     def download_direct():
@@ -147,9 +184,9 @@ def init_download_routes(download_service, download_dir, scheduler=None):
             browser_id = f"direct_{timestamp}"
 
             # Block scheduled checks before starting the download
+            # (pause_all_for_manual also raises the manual-active flag)
             if scheduler:
                 scheduler.pause_all_for_manual(browser_id)
-                scheduler.browser_service.set_manual_active(True)
 
             # Start download
             _, output_path = download_service.start_direct_download(
@@ -180,22 +217,25 @@ def init_download_routes(download_service, download_dir, scheduler=None):
             active_filenames = {d.get('filename', '') for d in active_downloads if d.get('is_running', False)}
 
             # List completed downloads
+            live_cache_keys = set()
             if os.path.exists(download_dir):
                 for filename in os.listdir(download_dir):
                     # Skip files that are currently being downloaded
                     if filename in active_filenames:
                         continue
-                        
+
                     filepath = os.path.join(download_dir, filename)
                     if os.path.isfile(filepath):
+                        # Stat once and share the cache key with both getters,
+                        # so a file changing mid-request can't get cached
+                        # under a key this request's eviction pass removes
                         stat = os.stat(filepath)
-                        
-                        # Get metadata
-                        metadata = get_file_metadata(filepath)
-                        
-                        # Get thumbnail
-                        thumbnail = get_file_thumbnail(filepath)
-                        
+                        cache_key = f"{filepath}:{stat.st_mtime}"
+                        live_cache_keys.add(cache_key)
+
+                        metadata = get_file_metadata(filepath, cache_key)
+                        thumbnail = get_file_thumbnail(filepath, cache_key)
+
                         downloads.append({
                             'filename': filename,
                             'size': stat.st_size,
@@ -206,6 +246,14 @@ def init_download_routes(download_service, download_dir, scheduler=None):
                             'framerate': metadata.get('framerate', ''),
                             'thumbnail': thumbnail
                         })
+
+            # Evict cache entries for files that were deleted or changed.
+            # pop() (not del) — concurrent /list requests may race on the
+            # same stale key
+            for cache in (_metadata_cache, _thumbnail_cache):
+                for key in list(cache.keys()):
+                    if key not in live_cache_keys:
+                        cache.pop(key, None)
 
             # Sort by creation time (newest first)
             downloads.sort(key=lambda x: x['created'], reverse=True)
@@ -234,10 +282,13 @@ def init_download_routes(download_service, download_dir, scheduler=None):
             filename = request.args.get('filename', '')
             if not filename:
                 return jsonify({'exists': False})
-            
-            filepath = os.path.join(download_dir, filename)
+
+            filepath = resolve_in_download_dir(filename)
+            if filepath is None:
+                return jsonify({'exists': False, 'error': 'Invalid file path'}), 400
+
             exists = os.path.exists(filepath)
-            
+
             return jsonify({'exists': exists, 'filename': filename})
         except Exception as e:
             logger.error(f"Check filename error: {e}")
@@ -247,12 +298,15 @@ def init_download_routes(download_service, download_dir, scheduler=None):
     def stop_download(browser_id):
         """Stop an active download"""
         try:
-            if download_service.stop_download(browser_id):
-                if scheduler:
-                    if not browser_id.startswith('sched_'):
-                        scheduler.browser_service.set_manual_active(False)
-                        scheduler.resume_after_manual(browser_id)
+            stopped = download_service.stop_download(browser_id)
 
+            # Release this id's manual session (ownership-checked no-op for
+            # ids that never registered, e.g. sched_ or stale ids), so
+            # schedules can't get stuck auto-paused behind a stale session
+            if scheduler:
+                scheduler.resume_after_manual(browser_id)
+
+            if stopped:
                 return jsonify({'success': True, 'message': 'Download stopped'})
             else:
                 return jsonify({'error': 'Download not found'}), 404
@@ -265,15 +319,11 @@ def init_download_routes(download_service, download_dir, scheduler=None):
     def delete_download(filename):
         """Delete a completed download"""
         try:
-            filepath = os.path.join(download_dir, filename)
-            
             # Security check: ensure the file is within download_dir
-            real_path = os.path.realpath(filepath)
-            real_download_dir = os.path.realpath(download_dir)
-            
-            if not real_path.startswith(real_download_dir):
+            filepath = resolve_in_download_dir(filename)
+            if filepath is None:
                 return jsonify({'error': 'Invalid file path'}), 400
-            
+
             if os.path.exists(filepath):
                 os.remove(filepath)
                 logger.info(f"Deleted file: {filepath}")

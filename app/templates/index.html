@@ -8,6 +8,7 @@
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='icons/mars.svg') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <meta name="theme-color" content="#1a1a2e">
+    {% if vnc_url %}<meta name="vnc-url" content="{{ vnc_url }}">{% endif %}
 </head>
 
 <body>
@@ -317,33 +318,7 @@
     <script src="{{ url_for('static', filename='js/schedules.js') }}"></script>
     <script src="{{ url_for('static', filename='js/init.js') }}"></script>
 
-    <!-- Download Success Popup -->
     <div class="popup-overlay" id="popup-overlay"></div>
-    <div class="download-popup" id="download-popup">
-        <h3>✓ Download Started!</h3>
-        <img class="thumbnail" id="popup-thumbnail" src="" alt="Video thumbnail">
-        <div class="info">
-            <p><strong>Stream Type:</strong> <span id="popup-stream-type"></span></p>
-            <p><strong>Saving to:</strong> <span id="popup-filename"></span></p>
-        </div>
-        <div class="countdown" id="popup-countdown">
-            Window closing in <strong>15</strong> seconds...
-        </div>
-        <div class="popup-buttons">
-            <button class="btn" onclick="closePopup()">Close Now</button>
-            <button class="btn btn-secondary" onclick="keepOpen()">Keep Open</button>
-        </div>
-    </div>
-
-    <!-- Resolution Selection Popup -->
-    <div class="download-popup" id="resolution-popup">
-        <h3>📺 Detected Streams</h3>
-        <p style="margin-bottom: 20px;">Select which stream to download:</p>
-        <div id="resolution-options" style="max-height: 400px; overflow-y: auto; margin-bottom: 20px;">
-            <!-- Resolution buttons will be added here dynamically -->
-        </div>
-        <button class="btn btn-secondary" onclick="closeResolutionPopup()">Cancel & Keep Browsing</button>
-    </div>
 
     <!-- Download Started Popup -->
     <div class="download-popup" id="download-started-popup" style="max-width: 600px;">
@@ -360,19 +335,6 @@
         </div>
         <div id="direct-buttons" style="display: none; justify-content: center;">
             <button class="btn" onclick="closeDownloadPopup()">✓ OK</button>
-        </div>
-    </div>
-
-    <!-- Debug Stream Log Popup -->
-    <div class="download-popup" id="debug-popup" style="max-width: 800px;">
-        <h3>🔍 Debug: Detected Streams Log</h3>
-        <p style="margin-bottom: 10px; color: #b8b8d1;">Copy this log for debugging. Updates automatically as streams are
-            detected.</p>
-        <textarea id="debug-log" readonly
-            style="width: 100%; height: 400px; font-family: monospace; font-size: 0.85rem; padding: 10px; border: 2px solid #4a4a6a; border-radius: 8px; background: #1e1e30; color: #e0e0e0; resize: vertical;"></textarea>
-        <div style="display: flex; gap: 10px; margin-top: 15px;">
-            <button class="btn" onclick="copyDebugLog()">📋 Copy to Clipboard</button>
-            <button class="btn btn-secondary" onclick="closeDebugPopup()">Close</button>
         </div>
     </div>
 

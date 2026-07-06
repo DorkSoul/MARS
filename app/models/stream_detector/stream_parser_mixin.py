@@ -3,11 +3,7 @@ Stream parsing and detection
 Mixin for StreamDetector class
 """
 import logging
-import json
 import time
-import threading
-import websocket
-import requests as req_lib
 
 from app.utils import PlaylistParser
 
@@ -78,25 +74,53 @@ class StreamParserMixin:
             return 'UNKNOWN'
 
     def _add_detected_stream(self, url, mime_type, stream_type=None):
-        """Add a detected stream and trigger processing"""
+        """Add a detected stream and trigger processing.
+
+        Deduped by URL under a lock: the same response arrives via both the
+        CDP WebSocket listener and the polling thread. Handling is claimed
+        under the lock BEFORE the slow playlist fetch/enrichment so a second
+        detection can never start a duplicate download for this browser_id.
+        """
         if stream_type is None:
             stream_type = self._get_stream_type(url)
 
-        stream_info = {
-            'url': url,
-            'type': stream_type,
-            'mime_type': mime_type,
-            'timestamp': time.time()
-        }
+        with self._detection_lock:
+            if url in self._seen_stream_urls:
+                return
+            self._seen_stream_urls.add(url)
 
-        if stream_info not in self.detected_streams:
+            stream_info = {
+                'url': url,
+                'type': stream_type,
+                'mime_type': mime_type,
+                'timestamp': time.time()
+            }
             logger.info(f"✓ DETECTED STREAM: type={stream_info['type']}")
             self.detected_streams.append(stream_info)
 
-            # Start download for the first valid stream
-            if not self.download_started and not self.awaiting_resolution_selection:
-                logger.info(f"Processing detected stream...")
+            if self.download_started or self.awaiting_resolution_selection:
+                return
+            if self._detection_in_progress:
+                # Another thread is mid-handling; queue this stream so it is
+                # retried if that handling ends without claiming a download
+                self._pending_streams.append(stream_info)
+                return
+            self._detection_in_progress = True
+
+        while stream_info is not None:
+            logger.info("Processing detected stream...")
+            try:
                 self._handle_stream_detection(stream_info)
+            except Exception as e:
+                logger.error(f"Error handling detected stream: {e}")
+            with self._detection_lock:
+                if (not self.download_started
+                        and not self.awaiting_resolution_selection
+                        and self._pending_streams):
+                    stream_info = self._pending_streams.pop(0)
+                else:
+                    self._detection_in_progress = False
+                    stream_info = None
 
     def _handle_stream_detection(self, stream_info):
         """Handle detected stream - check if it's a master playlist"""
@@ -114,7 +138,7 @@ class StreamParserMixin:
 
     def _process_master_playlist(self, stream_url, content):
         """Process a master playlist with multiple resolutions"""
-        resolutions = PlaylistParser.parse_master_playlist(content)
+        resolutions = PlaylistParser.parse_master_playlist(content, base_url=stream_url)
 
         if resolutions:
             if self.auto_download:

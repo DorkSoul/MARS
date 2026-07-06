@@ -26,11 +26,8 @@ def init_events_routes(browser_service, download_service):
 
                     if status is None:
                         # Check direct download status as fallback
-                        with download_service._queue_lock:
-                            direct = download_service.direct_download_status.get(browser_id)
-                        if direct:
-                            status = dict(direct)
-                        else:
+                        status = download_service.get_direct_status(browser_id)
+                        if status is None:
                             # Browser gone — send a final closed event and stop
                             yield f"data: {json.dumps({'is_running': False, 'closed': True})}\n\n"
                             return

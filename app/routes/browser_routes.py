@@ -36,9 +36,11 @@ def init_browser_routes(browser_service, download_service, config, scheduler=Non
 
             # Block scheduled checks BEFORE starting so the browser service
             # queue processor drops in-flight scheduled launches immediately
+            # (pause_all_for_manual also raises the manual-active flag)
             if scheduler:
                 scheduler.pause_all_for_manual(browser_id)
-            browser_service.set_manual_active(True)
+            else:
+                browser_service.set_manual_active(True)
 
             # Start browser
             success, detector = browser_service.start_browser(
@@ -56,7 +58,8 @@ def init_browser_routes(browser_service, download_service, config, scheduler=Non
                 # Roll back manual lock on failure
                 if scheduler:
                     scheduler.resume_after_manual(browser_id)
-                browser_service.set_manual_active(False)
+                else:
+                    browser_service.set_manual_active(False)
                 return jsonify({'error': 'Failed to start browser'}), 500
 
         except Exception as e:
@@ -78,8 +81,8 @@ def init_browser_routes(browser_service, download_service, config, scheduler=Non
                 return jsonify(status)
 
             # Check direct download status
-            if browser_id in download_service.direct_download_status:
-                status = download_service.direct_download_status[browser_id]
+            status = download_service.get_direct_status(browser_id)
+            if status:
                 download_info = download_service.get_download_status(browser_id)
                 if download_info:
                     status['download'] = download_info
@@ -95,38 +98,21 @@ def init_browser_routes(browser_service, download_service, config, scheduler=Non
     def close_browser(browser_id):
         """Close browser manually"""
         try:
-            if browser_service.close_browser(browser_id):
-                browser_service.set_manual_active(False)
-                if scheduler:
-                    scheduler.resume_after_manual(browser_id)
+            closed = browser_service.close_browser(browser_id)
+
+            # Release this id's manual session (ownership-checked no-op for
+            # ids that never registered, e.g. sched_ or stale ids), so
+            # schedules can't get stuck auto-paused behind a stale session
+            if scheduler:
+                scheduler.resume_after_manual(browser_id)
+
+            if closed:
                 return jsonify({'success': True, 'message': 'Browser closed'})
             else:
                 return jsonify({'error': 'Browser not found'}), 404
 
         except Exception as e:
             logger.error(f"Browser close error: {e}")
-            return jsonify({'error': str(e)}), 500
-
-    @browser_bp.route('/select-resolution', methods=['POST'])
-    def select_resolution():
-        """User manually selected a resolution"""
-        try:
-            data = request.json
-            browser_id = data.get('browser_id')
-            stream = data.get('stream')
-
-            if not all([browser_id, stream]):
-                return jsonify({'error': 'Missing required parameters'}), 400
-
-            success, message = browser_service.select_resolution(browser_id, stream)
-
-            if success:
-                return jsonify({'success': True, 'message': message})
-            else:
-                return jsonify({'error': message}), 404
-
-        except Exception as e:
-            logger.error(f"Resolution selection error: {e}")
             return jsonify({'error': str(e)}), 500
 
     @browser_bp.route('/select-stream', methods=['POST'])

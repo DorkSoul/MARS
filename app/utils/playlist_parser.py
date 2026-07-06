@@ -1,5 +1,6 @@
 import re
 import logging
+from urllib.parse import urljoin
 import requests
 
 logger = logging.getLogger(__name__)
@@ -7,6 +8,11 @@ logger = logging.getLogger(__name__)
 
 class PlaylistParser:
     """Handles parsing of HLS master playlists"""
+
+    # Matches KEY=VALUE pairs where VALUE may be a quoted string containing
+    # commas (e.g. CODECS="avc1.64001f,mp4a.40.2") — a plain split(',') would
+    # truncate those values.
+    _ATTR_RE = re.compile(r'([A-Z0-9-]+)=("[^"]*"|[^,]*)')
 
     @staticmethod
     def fetch_master_playlist(url):
@@ -21,8 +27,12 @@ class PlaylistParser:
             return None
 
     @staticmethod
-    def parse_master_playlist(content):
-        """Parse master playlist and extract resolution information"""
+    def parse_master_playlist(content, base_url=None):
+        """Parse master playlist and extract resolution information.
+
+        base_url (the master playlist URL) is used to resolve relative
+        variant URIs, which are common in HLS playlists.
+        """
         resolutions = []
         lines = content.split('\n')
 
@@ -32,18 +42,19 @@ class PlaylistParser:
 
             # Look for stream info lines
             if line.startswith('#EXT-X-STREAM-INF:'):
-                # Parse attributes
-                attrs = {}
-                for attr in line.split(','):
-                    if '=' in attr:
-                        key, value = attr.split('=', 1)
-                        attrs[key.strip()] = value.strip('"')
+                attrs = {
+                    key: value.strip('"')
+                    for key, value in PlaylistParser._ATTR_RE.findall(line.split(':', 1)[1])
+                }
 
                 # Get the URL from next line
                 if i + 1 < len(lines):
                     stream_url = lines[i + 1].strip()
 
                     if stream_url and not stream_url.startswith('#'):
+                        if base_url:
+                            stream_url = urljoin(base_url, stream_url)
+
                         # Get base name and framerate
                         base_name = attrs.get('IVS-NAME', attrs.get('STABLE-VARIANT-ID', ''))
                         framerate = attrs.get('FRAME-RATE', '')
@@ -56,9 +67,14 @@ class PlaylistParser:
                             if not re.search(r'p\d+$', base_name):
                                 base_name = f"{base_name}{fps_numeric}"
 
+                        try:
+                            bandwidth = int(attrs.get('BANDWIDTH', 0))
+                        except ValueError:
+                            bandwidth = 0
+
                         resolution_info = {
                             'url': stream_url,
-                            'bandwidth': int(attrs.get('BANDWIDTH', 0)),
+                            'bandwidth': bandwidth,
                             'resolution': attrs.get('RESOLUTION', ''),
                             'framerate': framerate,
                             'codecs': attrs.get('CODECS', ''),
@@ -78,31 +94,3 @@ class PlaylistParser:
             logger.info(f"  [{idx}] {res['name']} - {res['resolution']} @ {res.get('framerate', '?')}fps - Bandwidth: {res['bandwidth']}")
 
         return resolutions
-
-    @staticmethod
-    def match_resolution(resolutions, preferred):
-        """Find best matching resolution"""
-        if not resolutions:
-            return None
-
-        preferred_lower = preferred.lower()
-
-        # Try exact match first
-        for res in resolutions:
-            if res['name'].lower() == preferred_lower:
-                logger.info(f"Found exact match for {preferred}: {res['name']}")
-                return res
-
-        # Try partial match (e.g., "1080p" matches "1080p60")
-        for res in resolutions:
-            if preferred_lower in res['name'].lower():
-                logger.info(f"Found partial match for {preferred}: {res['name']}")
-                return res
-
-        # Special case: "source" means highest quality
-        if preferred_lower == 'source':
-            logger.info(f"Source requested, returning highest quality: {resolutions[0]['name']}")
-            return resolutions[0]
-
-        logger.warning(f"No match found for {preferred}")
-        return None

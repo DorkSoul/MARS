@@ -3,11 +3,7 @@ Resolution and framerate matching
 Mixin for StreamDetector class
 """
 import logging
-import json
-import time
-import threading
-import websocket
-import requests as req_lib
+import re
 
 logger = logging.getLogger(__name__)
 

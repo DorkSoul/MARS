@@ -3,11 +3,7 @@ Download management
 Mixin for StreamDetector class
 """
 import logging
-import json
 import time
-import threading
-import websocket
-import requests as req_lib
 from datetime import datetime
 
 from app.utils import MetadataExtractor, ThumbnailGenerator
@@ -38,8 +34,18 @@ class DownloadHandlerMixin:
         self._start_download_with_url(stream['url'], resolution_name, stream)
 
     def _start_download_with_url(self, stream_url, resolution_name, stream_metadata=None):
-        """Start download with specific URL"""
-        self.download_started = True
+        """Start download with specific URL.
+
+        Single claim point for auto-detection and manual selection alike —
+        only the first caller may start FFmpeg for this browser session, so a
+        double-clicked selection or a manual click racing auto-detection
+        can't spawn a second FFmpeg under the same browser_id.
+        """
+        with self._detection_lock:
+            if self.download_started:
+                logger.info("Download already started for this session; ignoring duplicate start")
+                return
+            self.download_started = True
         self.selected_stream_url = stream_url
         self.selected_stream_metadata = stream_metadata
 

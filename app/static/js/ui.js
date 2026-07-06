@@ -1,214 +1,24 @@
 // UI and popup management
 
-function showDownloadPopup(data) {
-    const popup = document.getElementById('download-popup');
-    const overlay = document.getElementById('popup-overlay');
-    const thumbnail = document.getElementById('popup-thumbnail');
-    const streamType = document.getElementById('popup-stream-type');
-    const filename = document.getElementById('popup-filename');
+// ── DOM helpers ───────────────────────────────────────────────
+// All dynamic values (filenames, stream names, URLs) are set via
+// textContent/properties, never interpolated into HTML — quotes in a
+// filename or a malicious playlist's stream name must not break the UI.
 
-    // Set data
-    if (data.thumbnail) {
-        thumbnail.src = 'data:image/png;base64,' + data.thumbnail;
-    }
-
-    if (data.latest_stream) {
-        streamType.textContent = data.latest_stream.type;
-    }
-
-    if (data.download) {
-        filename.textContent = data.download.output_path;
-    }
-
-    // Show popup
-    popup.classList.add('active');
-    overlay.classList.add('active');
-
-    // DEBUG MODE: Countdown timer disabled
-    // startCountdown();
+function _el(tag, cssText = '', text = null) {
+    const node = document.createElement(tag);
+    if (cssText) node.style.cssText = cssText;
+    if (text !== null) node.textContent = text;
+    return node;
 }
 
-// Start countdown (DISABLED FOR DEBUGGING)
-function startCountdown() {
-    // AppState.countdownValue = 15;
-    // updateCountdown();
-    // AppState.countdownInterval = setInterval(() => {
-    //     AppState.countdownValue--;
-    //     updateCountdown();
-    //     if (AppState.countdownValue <= 0) {
-    //         clearInterval(AppState.countdownInterval);
-    //         closePopup();
-    //         closeBrowser();
-    //     }
-    // }, 1000);
-}
-
-// Update countdown display
-function updateCountdown() {
-    const countdown = document.getElementById('popup-countdown');
-    countdown.innerHTML = `Download in progress - browser will stay open`;
-}
-
-// Close popup
-function closePopup() {
-    const popup = document.getElementById('download-popup');
-    const overlay = document.getElementById('popup-overlay');
-
-    popup.classList.remove('active');
-    overlay.classList.remove('active');
-
-    if (AppState.countdownInterval) {
-        clearInterval(AppState.countdownInterval);
-    }
-}
-
-// Keep browser open
-function keepOpen() {
-    if (AppState.countdownInterval) {
-        clearInterval(AppState.countdownInterval);
-    }
-    closePopup();
-
-    const statusBox = document.getElementById('browser-status');
-    showStatus(statusBox, 'Browser kept open. Close manually when done.', 'success');
-}
-
-// Show resolution selection popup
-function showResolutionPopup(resolutions) {
-    const popup = document.getElementById('resolution-popup');
-    const overlay = document.getElementById('popup-overlay');
-    const optionsContainer = document.getElementById('resolution-options');
-
-    // Clear existing options
-    optionsContainer.innerHTML = '';
-
-    // Add resolution buttons with detailed info
-    resolutions.forEach(res => {
-        const card = document.createElement('div');
-        card.style.cssText = 'background: #1e1e30; padding: 15px; border-radius: 8px; margin-bottom: 10px; cursor: pointer; border: 2px solid #4a4a6a; transition: all 0.2s;';
-        card.onmouseover = () => card.style.borderColor = '#7e8ce0';
-        card.onmouseout = () => card.style.borderColor = '#4a4a6a';
-        card.onclick = () => selectResolution(res);
-
-        const title = document.createElement('h4');
-        title.style.cssText = 'margin: 0 0 8px 0; color: #7e8ce0; font-size: 1.1rem;';
-        title.textContent = res.name || 'Unknown';
-
-        const details = document.createElement('div');
-        details.style.cssText = 'font-size: 0.9rem; color: #b8b8d1;';
-
-        const resolution = res.resolution || 'Unknown';
-        const framerate = res.framerate ? Math.round(parseFloat(res.framerate)) + ' fps' : 'Unknown';
-
-        details.innerHTML = `
-            <p style="margin: 4px 0;"><strong>Resolution:</strong> ${resolution}</p>
-            <p style="margin: 4px 0;"><strong>Framerate:</strong> ${framerate}</p>
-            <p style="margin: 4px 0; font-size: 0.75rem; word-break: break-all;"><strong>URL:</strong> ${res.url.substring(0, 80)}...</p>
-        `;
-
-        card.appendChild(title);
-        card.appendChild(details);
-        optionsContainer.appendChild(card);
-    });
-
-    // Show popup
-    popup.classList.add('active');
-    overlay.classList.add('active');
-}
-
-// Select a resolution
-async function selectResolution(stream) {
-    closeResolutionPopup();
-
-    const statusBox = document.getElementById('browser-status');
-    showStatus(statusBox, `✓ Starting download for ${stream.name}...`, 'success');
-
-    try {
-        const response = await fetch('/api/browser/select-resolution', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                browser_id: AppState.currentBrowserId,
-                stream: stream
-            })
-        });
-
-        const data = await response.json();
-        if (!data.success) {
-            showStatus(statusBox, `Error: ${data.error}`, 'error');
-        }
-    } catch (error) {
-        showStatus(statusBox, `Error: ${error.message}`, 'error');
-    }
-}
-
-// Close resolution popup
-function closeResolutionPopup() {
-    const popup = document.getElementById('resolution-popup');
-    const overlay = document.getElementById('popup-overlay');
-
-    popup.classList.remove('active');
-    overlay.classList.remove('active');
-}
-
-// Show debug popup
-function showDebugPopup() {
-    const popup = document.getElementById('debug-popup');
-    const overlay = document.getElementById('popup-overlay');
-
-    popup.classList.add('active');
-    overlay.classList.add('active');
-}
-
-// Update debug log with stream information
-function updateDebugLog(resolutions) {
-    const timestamp = new Date().toISOString();
-    let newContent = `\n=== STREAM DETECTION UPDATE @ ${timestamp} ===\n`;
-    newContent += `Total Streams Detected: ${resolutions.length}\n\n`;
-
-    resolutions.forEach((res, index) => {
-        newContent += `--- Stream ${index + 1} ---\n`;
-        newContent += `Name: ${res.name || 'Unknown'}\n`;
-        newContent += `Resolution: ${res.resolution || 'Unknown'}\n`;
-        newContent += `Framerate: ${res.framerate || 'Unknown'}\n`;
-        newContent += `Codecs: ${res.codecs || 'Unknown'}\n`;
-        newContent += `URL: ${res.url}\n`;
-        newContent += `\n`;
-    });
-
-    // Append to existing content
-    AppState.debugLogContent += newContent;
-
-    // Update textarea
-    const textarea = document.getElementById('debug-log');
-    textarea.value = AppState.debugLogContent;
-
-    // Auto-scroll to bottom
-    textarea.scrollTop = textarea.scrollHeight;
-}
-
-// Copy debug log to clipboard
-function copyDebugLog() {
-    const textarea = document.getElementById('debug-log');
-    textarea.select();
-    document.execCommand('copy');
-
-    // Show feedback
-    const btn = event.target;
-    const originalText = btn.innerHTML;
-    btn.innerHTML = '✓ Copied!';
-    setTimeout(() => {
-        btn.innerHTML = originalText;
-    }, 2000);
-}
-
-// Close debug popup
-function closeDebugPopup() {
-    const popup = document.getElementById('debug-popup');
-    const overlay = document.getElementById('popup-overlay');
-
-    popup.classList.remove('active');
-    overlay.classList.remove('active');
+function _infoLine(label, value, cssText = 'margin: 4px 0; color: #b8b8d1; font-size: 0.9rem;') {
+    const p = _el('p', cssText);
+    const strong = document.createElement('strong');
+    strong.textContent = `${label}: `;
+    p.appendChild(strong);
+    p.appendChild(document.createTextNode(value));
+    return p;
 }
 
 // Show download started popup
@@ -228,18 +38,17 @@ function showDownloadStartedPopup(streamMetadata, thumbnail, isDirect = false) {
     const framerate = streamMetadata?.framerate ? Math.round(parseFloat(streamMetadata.framerate)) + ' fps' : 'Unknown';
     const name = streamMetadata?.name || 'Video';
 
-    let infoHTML = `
-        <h4 style="margin: 0 0 10px 0; color: #7e8ce0;">${name}</h4>
-        <p style="margin: 4px 0;"><strong>Resolution:</strong> ${resolution}</p>
-        <p style="margin: 4px 0;"><strong>Framerate:</strong> ${framerate}</p>
-    `;
+    infoContainer.innerHTML = '';
 
-    // Add thumbnail if available
     if (thumbnail) {
-        infoHTML = `<img src="data:image/png;base64,${thumbnail}" style="width: 100%; border-radius: 8px; margin-bottom: 10px;" />` + infoHTML;
+        const img = _el('img', 'width: 100%; border-radius: 8px; margin-bottom: 10px;');
+        img.src = 'data:image/png;base64,' + thumbnail;
+        infoContainer.appendChild(img);
     }
 
-    infoContainer.innerHTML = infoHTML;
+    infoContainer.appendChild(_el('h4', 'margin: 0 0 10px 0; color: #7e8ce0;', name));
+    infoContainer.appendChild(_infoLine('Resolution', resolution, 'margin: 4px 0;'));
+    infoContainer.appendChild(_infoLine('Framerate', framerate, 'margin: 4px 0;'));
 
     // Show/hide appropriate elements based on download type
     if (isDirect) {
@@ -402,8 +211,7 @@ async function loadDownloads() {
 
         if (data.active_downloads && data.active_downloads.length > 0) {
             data.active_downloads.forEach(download => {
-                const item = document.createElement('div');
-                item.style.cssText = 'background: #1e1e30; padding: 15px; border-radius: 8px; margin-bottom: 10px; border: 2px solid #4a4a6a;';
+                const item = _el('div', 'background: #1e1e30; padding: 15px; border-radius: 8px; margin-bottom: 10px; border: 2px solid #4a4a6a;');
 
                 const sizeMB = (download.size / (1024 * 1024)).toFixed(2);
                 const minutes = Math.floor(download.duration / 60);
@@ -412,31 +220,38 @@ async function loadDownloads() {
                 const statusIcon = download.is_running ? '⏬' : '✓';
                 const statusText = download.is_running ? 'Downloading...' : 'Completed';
 
-                item.innerHTML = `
-                    <div style="display: flex; gap: 15px; align-items: center;">
-                        ${download.thumbnail ? `
-                            <div style="flex-shrink: 0;">
-                                <img src="data:image/png;base64,${download.thumbnail}"
-                                     style="width: 160px; height: 90px; object-fit: cover; border-radius: 8px; border: 2px solid #667eea;"
-                                     alt="Video preview">
-                            </div>
-                        ` : ''}
-                        <div style="flex: 1;">
-                            <h4 style="margin: 0 0 8px 0; color: #7e8ce0;">${statusIcon} ${download.filename}</h4>
-                            <p style="margin: 4px 0; color: #b8b8d1; font-size: 0.9rem;"><strong>Resolution:</strong> ${download.resolution}</p>
-                            <p style="margin: 4px 0; color: #b8b8d1; font-size: 0.9rem;"><strong>Size:</strong> ${sizeMB} MB &nbsp;&nbsp; <strong>Duration:</strong> ${timeStr}</p>
-                            <p style="margin: 4px 0; color: #b8b8d1; font-size: 0.9rem;"><strong>Status:</strong> ${statusText}</p>
-                        </div>
-                        <div style="flex-shrink: 0;">
-                            ${download.is_running ? `<button class="btn btn-secondary" onclick="stopDownload('${download.browser_id}', this)" style="background: #dc3545;">⏹ Stop</button>` : ''}
-                        </div>
-                    </div>
-                `;
+                const row = _el('div', 'display: flex; gap: 15px; align-items: center;');
 
+                if (download.thumbnail) {
+                    const thumbWrap = _el('div', 'flex-shrink: 0;');
+                    const img = _el('img', 'width: 160px; height: 90px; object-fit: cover; border-radius: 8px; border: 2px solid #667eea;');
+                    img.src = 'data:image/png;base64,' + download.thumbnail;
+                    img.alt = 'Video preview';
+                    thumbWrap.appendChild(img);
+                    row.appendChild(thumbWrap);
+                }
+
+                const info = _el('div', 'flex: 1;');
+                info.appendChild(_el('h4', 'margin: 0 0 8px 0; color: #7e8ce0;', `${statusIcon} ${download.filename}`));
+                info.appendChild(_infoLine('Resolution', download.resolution));
+                info.appendChild(_infoLine('Size', `${sizeMB} MB — Duration: ${timeStr}`));
+                info.appendChild(_infoLine('Status', statusText));
+                row.appendChild(info);
+
+                const actions = _el('div', 'flex-shrink: 0;');
+                if (download.is_running) {
+                    const stopBtn = _el('button', 'background: #dc3545;', '⏹ Stop');
+                    stopBtn.className = 'btn btn-secondary';
+                    stopBtn.addEventListener('click', () => stopDownload(download.browser_id, stopBtn));
+                    actions.appendChild(stopBtn);
+                }
+                row.appendChild(actions);
+
+                item.appendChild(row);
                 container.appendChild(item);
             });
         } else {
-            container.innerHTML = '<p style="color: #b8b8d1; padding: 20px;">No active downloads</p>';
+            container.appendChild(_el('p', 'color: #b8b8d1; padding: 20px;', 'No active downloads'));
         }
     } catch (error) {
         console.error('Load downloads error:', error);
@@ -445,7 +260,7 @@ async function loadDownloads() {
 
 async function stopDownload(browserId, buttonElement) {
     try {
-        // Show deleting state
+        // Show stopping state
         if (buttonElement) {
             buttonElement.disabled = true;
             buttonElement.innerHTML = '<span class="spinner"></span> Stopping...';
@@ -486,9 +301,7 @@ async function loadCompletedDownloads() {
 
         if (data.downloads && data.downloads.length > 0) {
             data.downloads.forEach(download => {
-                const item = document.createElement('div');
-                item.style.cssText = 'background: #1e1e30; padding: 15px; border-radius: 8px; margin-bottom: 10px; border: 2px solid #4a4a6a;';
-                item.id = `completed-${download.filename}`;
+                const item = _el('div', 'background: #1e1e30; padding: 15px; border-radius: 8px; margin-bottom: 10px; border: 2px solid #4a4a6a;');
 
                 const sizeMB = (download.size / (1024 * 1024)).toFixed(2);
                 const minutes = Math.floor(download.duration / 60);
@@ -496,34 +309,39 @@ async function loadCompletedDownloads() {
                 const timeStr = download.duration > 0 ? `${minutes}:${seconds.toString().padStart(2, '0')}` : 'Unknown';
                 const resolutionStr = download.framerate ? `${download.resolution}@${download.framerate}` : download.resolution;
 
-                item.innerHTML = `
-                    <div style="display: flex; gap: 15px; align-items: center;">
-                        ${download.thumbnail ? `
-                            <div style="flex-shrink: 0;">
-                                <img src="data:image/jpeg;base64,${download.thumbnail}"
-                                     style="width: 160px; height: 90px; object-fit: cover; border-radius: 8px; border: 2px solid #28a745;"
-                                     alt="Video preview">
-                            </div>
-                        ` : `
-                            <div style="flex-shrink: 0; width: 160px; height: 90px; background: linear-gradient(135deg, #3d3d5c 0%, #4a4a6a 100%); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #b8b8d1; font-size: 32px;">
-                                🎬
-                            </div>
-                        `}
-                        <div style="flex: 1;">
-                            <h4 style="margin: 0 0 8px 0; color: #28a745;">✓ ${download.filename}</h4>
-                            <p style="margin: 4px 0; color: #b8b8d1; font-size: 0.9rem;"><strong>Resolution:</strong> ${resolutionStr}</p>
-                            <p style="margin: 4px 0; color: #b8b8d1; font-size: 0.9rem;"><strong>Size:</strong> ${sizeMB} MB &nbsp;&nbsp; <strong>Duration:</strong> ${timeStr}</p>
-                        </div>
-                        <div style="flex-shrink: 0;">
-                            <button class="btn btn-secondary" onclick="deleteDownload('${download.filename}', this)" style="background: #dc3545;">🗑 Delete</button>
-                        </div>
-                    </div>
-                `;
+                const row = _el('div', 'display: flex; gap: 15px; align-items: center;');
 
+                if (download.thumbnail) {
+                    const thumbWrap = _el('div', 'flex-shrink: 0;');
+                    const img = _el('img', 'width: 160px; height: 90px; object-fit: cover; border-radius: 8px; border: 2px solid #28a745;');
+                    img.src = 'data:image/jpeg;base64,' + download.thumbnail;
+                    img.alt = 'Video preview';
+                    thumbWrap.appendChild(img);
+                    row.appendChild(thumbWrap);
+                } else {
+                    row.appendChild(_el('div',
+                        'flex-shrink: 0; width: 160px; height: 90px; background: linear-gradient(135deg, #3d3d5c 0%, #4a4a6a 100%); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #b8b8d1; font-size: 32px;',
+                        '🎬'));
+                }
+
+                const info = _el('div', 'flex: 1;');
+                info.appendChild(_el('h4', 'margin: 0 0 8px 0; color: #28a745;', `✓ ${download.filename}`));
+                info.appendChild(_infoLine('Resolution', resolutionStr));
+                info.appendChild(_infoLine('Size', `${sizeMB} MB — Duration: ${timeStr}`));
+                row.appendChild(info);
+
+                const actions = _el('div', 'flex-shrink: 0;');
+                const deleteBtn = _el('button', 'background: #dc3545;', '🗑 Delete');
+                deleteBtn.className = 'btn btn-secondary';
+                deleteBtn.addEventListener('click', () => deleteDownload(download.filename, deleteBtn));
+                actions.appendChild(deleteBtn);
+                row.appendChild(actions);
+
+                item.appendChild(row);
                 container.appendChild(item);
             });
         } else {
-            container.innerHTML = '<p style="color: #b8b8d1; padding: 20px;">No completed downloads</p>';
+            container.appendChild(_el('p', 'color: #b8b8d1; padding: 20px;', 'No completed downloads'));
         }
     } catch (error) {
         console.error('Load completed downloads error:', error);
@@ -564,8 +382,6 @@ async function deleteDownload(filename, buttonElement) {
 }
 
 // Show status message
-// Store timeout IDs for each status element
-
 function showStatus(element, message, type) {
     element.textContent = message;
     element.className = 'status-box active ' + type;
@@ -621,32 +437,42 @@ function showStreamModal(streams) {
             `${stream.framerate} fps` :
             'Unknown';
 
-        card.innerHTML = `
-            <div class="stream-thumbnail">
-                ${stream.thumbnail ?
-                `<img src="${stream.thumbnail}" alt="${stream.name}">` :
-                '🎬'
-            }
-            </div>
-            <div class="stream-details">
-                <h3>${stream.name}</h3>
-                <div class="stream-detail-row">
-                    <span class="stream-detail-label">Resolution:</span>
-                    <span>${stream.resolution || 'Unknown'}</span>
-                </div>
-                <div class="stream-detail-row">
-                    <span class="stream-detail-label">Framerate:</span>
-                    <span>${framerate}</span>
-                </div>
-                <div class="stream-detail-row">
-                    <span class="stream-detail-label">Codec:</span>
-                    <span>${stream.codecs || 'Unknown'}</span>
-                </div>
-            </div>
-            <button class="stream-download-btn" onclick='downloadStream(${JSON.stringify(stream)})'>
-                📥 Download This Stream
-            </button>
-        `;
+        const thumb = document.createElement('div');
+        thumb.className = 'stream-thumbnail';
+        if (stream.thumbnail) {
+            const img = document.createElement('img');
+            img.src = stream.thumbnail;
+            img.alt = stream.name || 'Stream';
+            thumb.appendChild(img);
+        } else {
+            thumb.textContent = '🎬';
+        }
+        card.appendChild(thumb);
+
+        const details = document.createElement('div');
+        details.className = 'stream-details';
+        details.appendChild(_el('h3', '', stream.name || 'Unknown'));
+
+        const addRow = (label, value) => {
+            const row = document.createElement('div');
+            row.className = 'stream-detail-row';
+            const labelSpan = document.createElement('span');
+            labelSpan.className = 'stream-detail-label';
+            labelSpan.textContent = `${label}:`;
+            row.appendChild(labelSpan);
+            row.appendChild(_el('span', '', value));
+            details.appendChild(row);
+        };
+        addRow('Resolution', stream.resolution || 'Unknown');
+        addRow('Framerate', framerate);
+        addRow('Codec', stream.codecs || 'Unknown');
+        card.appendChild(details);
+
+        const downloadBtn = document.createElement('button');
+        downloadBtn.className = 'stream-download-btn';
+        downloadBtn.textContent = '📥 Download This Stream';
+        downloadBtn.addEventListener('click', () => downloadStream(stream));
+        card.appendChild(downloadBtn);
 
         container.appendChild(card);
     });
@@ -681,5 +507,3 @@ async function downloadStream(stream) {
         alert(`Error: ${error.message}`);
     }
 }
-
-// Schedules

@@ -115,20 +115,39 @@ async function loadSchedules() {
                 statusText = `${sched.status} (Next check: ${formatRFC2822(sched.next_check)})`;
             }
 
-            item.innerHTML = `
-                <div style="display:flex;justify-content:space-between;align-items:start;gap:10px;">
-                    <div style="flex:1;min-width:0;">
-                        <h4 style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${sched.url}">${sched.url}</h4>
-                        <p><strong>Window:</strong> ${windowText}</p>
-                        <p><strong>Repeat:</strong> ${repeatText}</p>
-                        <p style="color:${statusColor}"><strong>Status:</strong> ${statusText}</p>
-                    </div>
-                    <div style="display:flex;flex-direction:column;gap:5px;">
-                        <button class="btn btn-secondary" style="width:auto;padding:5px 10px;font-size:0.8rem;background:#7e8ce0;" onclick='editSchedule(${JSON.stringify(sched)})'>EDIT</button>
-                        <button class="btn btn-secondary" style="width:auto;padding:5px 10px;font-size:0.8rem;background:${sched.paused ? '#28a745' : '#e09820'};" onclick="pauseSchedule('${sched.id}',this)">${sched.paused ? 'UNPAUSE' : 'PAUSE'}</button>
-                        <button class="btn btn-secondary" style="width:auto;padding:5px 10px;font-size:0.8rem;background:#dc3545;" onclick="deleteSchedule('${sched.id}',this)">DELETE</button>
-                    </div>
-                </div>`;
+            // Build with DOM APIs — the URL is user-controlled and must not be
+            // interpolated into HTML or inline handlers
+            const row = _el('div', 'display:flex;justify-content:space-between;align-items:start;gap:10px;');
+
+            const info = _el('div', 'flex:1;min-width:0;');
+            const title = _el('h4', 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;', sched.url);
+            title.title = sched.url;
+            info.appendChild(title);
+            info.appendChild(_infoLine('Window', windowText, ''));
+            info.appendChild(_infoLine('Repeat', repeatText, ''));
+            info.appendChild(_infoLine('Status', statusText, `color:${statusColor}`));
+            row.appendChild(info);
+
+            const buttons = _el('div', 'display:flex;flex-direction:column;gap:5px;');
+            const btnCss = 'width:auto;padding:5px 10px;font-size:0.8rem;';
+
+            const editBtn = _el('button', btnCss + 'background:#7e8ce0;', 'EDIT');
+            editBtn.className = 'btn btn-secondary';
+            editBtn.addEventListener('click', () => editSchedule(sched));
+            buttons.appendChild(editBtn);
+
+            const pauseBtn = _el('button', btnCss + `background:${sched.paused ? '#28a745' : '#e09820'};`, sched.paused ? 'UNPAUSE' : 'PAUSE');
+            pauseBtn.className = 'btn btn-secondary';
+            pauseBtn.addEventListener('click', () => pauseSchedule(sched.id, pauseBtn));
+            buttons.appendChild(pauseBtn);
+
+            const deleteBtn = _el('button', btnCss + 'background:#dc3545;', 'DELETE');
+            deleteBtn.className = 'btn btn-secondary';
+            deleteBtn.addEventListener('click', () => deleteSchedule(sched.id, deleteBtn));
+            buttons.appendChild(deleteBtn);
+
+            row.appendChild(buttons);
+            item.appendChild(row);
             container.appendChild(item);
         });
     } catch (error) {

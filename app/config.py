@@ -10,9 +10,6 @@ class Config:
         self.DOWNLOAD_DIR = os.getenv('DOWNLOAD_DIR', '/app/downloads')
         self.CHROME_USER_DATA_DIR = os.getenv('CHROME_USER_DATA_DIR', '/app/chrome-data')
 
-        # Timing
-        self.AUTO_CLOSE_DELAY = int(os.getenv('AUTO_CLOSE_DELAY', '15'))
-
         # Schedules
         self.SCHEDULES_FILE = os.path.join(self.CHROME_USER_DATA_DIR, 'schedules.json')
 

@@ -280,32 +280,6 @@ class BrowserService:
         with self.queue_lock:
             return self.active_browsers.get(browser_id)
 
-    def select_resolution(self, browser_id, stream):
-        """Handle manual resolution selection"""
-        with self.queue_lock:
-            if browser_id not in self.active_browsers:
-                return False, "Browser not found"
-
-            detector = self.active_browsers[browser_id]
-
-            # Check if browser is still queued
-            if isinstance(detector, dict):
-                return False, "Browser is queued and not yet launched"
-
-        logger.info(f"User selected resolution: {stream.get('name')}")
-
-        # Enrich metadata before download
-        from app.utils import MetadataExtractor
-        MetadataExtractor.enrich_stream_metadata(stream)
-
-        # Clear awaiting state
-        detector.awaiting_resolution_selection = False
-
-        # Start download
-        detector._start_download_with_stream(stream)
-
-        return True, f'Starting download for {stream.get("name")}'
-
     def select_stream(self, browser_id, stream_url):
         """Handle manual stream selection"""
         with self.queue_lock:
@@ -354,7 +328,8 @@ class BrowserService:
             logger.info("Clear cookies requested")
 
             # Close all active browsers
-            browsers_to_close = list(self.active_browsers.keys())
+            with self.queue_lock:
+                browsers_to_close = list(self.active_browsers.keys())
             for browser_id in browsers_to_close:
                 try:
                     self.close_browser(browser_id)

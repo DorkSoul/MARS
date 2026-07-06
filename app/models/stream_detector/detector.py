@@ -32,6 +32,13 @@ class StreamDetector(CDPMixin, NetworkMonitorMixin, StreamParserMixin,
         self.config = config
         self.driver = None
         self.detected_streams = []
+        # Dedup/claim state: the CDP WebSocket listener and the legacy polling
+        # thread both report the same responses, so detection must be
+        # serialized to avoid starting duplicate downloads
+        self._detection_lock = threading.Lock()
+        self._seen_stream_urls = set()
+        self._detection_in_progress = False
+        self._pending_streams = []  # streams detected while another was being handled
         self.is_running = False
         self.is_closing = False  # Flag to prevent duplicate close logs
         self.download_started = False
@@ -259,8 +266,10 @@ class StreamDetector(CDPMixin, NetworkMonitorMixin, StreamParserMixin,
                     time.sleep(0.5)
                 
                 # Use JavaScript navigation for more forceful control
+                # (URL passed as an argument, not interpolated — quotes in the
+                # URL would otherwise break out of the JS string)
                 try:
-                    self.driver.execute_script(f'window.location.href = "{url}";')
+                    self.driver.execute_script('window.location.href = arguments[0];', url)
                 except Exception:
                     self.driver.get(url)
                 

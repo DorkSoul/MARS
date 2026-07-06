@@ -4,8 +4,6 @@ Mixin for StreamDetector class
 """
 import logging
 import json
-import time
-import threading
 import websocket
 import requests as req_lib
 
@@ -147,12 +145,15 @@ class CDPMixin:
             self.cdp_session_id += 1
             ws.send(json.dumps(page_enable_cmd))
 
-            # Fetch domain
+            # Fetch domain — only intercept m3u8 requests (all _handle_fetch_event
+            # looks at). Pausing every request through this Python websocket
+            # round-trip noticeably slows page loads; Network.responseReceived
+            # events still cover everything else.
             fetch_enable_cmd = {
                 "id": self.cdp_session_id,
                 "method": "Fetch.enable",
                 "params": {
-                    "patterns": [{"urlPattern": "*", "requestStage": "Request"}]
+                    "patterns": [{"urlPattern": "*m3u8*", "requestStage": "Request"}]
                 }
             }
             self.cdp_session_id += 1

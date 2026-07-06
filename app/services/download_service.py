@@ -18,9 +18,18 @@ class DownloadService:
         self.download_queue = {}          # protected by _queue_lock
         self.direct_download_status = {}  # protected by _queue_lock
         self.download_thumbnails = {}     # protected by _queue_lock
-        # History file lives in /app/logs by default so it doesn't appear
-        # inside the user's downloads folder. Can be overridden via history_file.
+        # History file defaults to a hidden file inside the download dir;
+        # app.py overrides it with config.HISTORY_FILE (/app/logs) so it
+        # doesn't appear in the user's downloads folder.
         self._history_file = history_file or os.path.join(download_dir, '.download_history.json')
+        # Optional callback fired with browser_id when a download finishes
+        # (success, failure, or stop) — lets the app release manual-session
+        # state that would otherwise stay locked after natural completion.
+        self._completion_callback = None
+
+    def set_completion_callback(self, callback):
+        """Set a callback invoked with browser_id when any download finishes."""
+        self._completion_callback = callback
 
     # ------------------------------------------------------------------ #
     # Public API
@@ -99,6 +108,12 @@ class DownloadService:
             })
 
         return active
+
+    def get_direct_status(self, browser_id):
+        """Return a copy of the direct-download status entry, or None."""
+        with self._queue_lock:
+            status = self.direct_download_status.get(browser_id)
+            return dict(status) if status else None
 
     def get_download_status(self, browser_id):
         """Get download status for a specific browser_id."""
@@ -273,6 +288,11 @@ class DownloadService:
                     self.download_queue[browser_id]['success'] = False
         finally:
             stop_thumbnail_event.set()
+            if self._completion_callback:
+                try:
+                    self._completion_callback(browser_id)
+                except Exception as cb_error:
+                    logger.error(f"Download completion callback error: {cb_error}")
             # Use a Timer instead of spawning a thread just to sleep
             threading.Timer(30.0, self._cleanup_download, args=(browser_id,)).start()
 

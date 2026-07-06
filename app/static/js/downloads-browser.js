@@ -1,42 +1,18 @@
 // Download and browser functionality
 
-// Core functionality: validation, downloads, browser, and UI
+// Core functionality: downloads, browser, and UI
+// (validateFilename comes from validation.js)
 
-
-// Validate filename doesn't already exist
-async function validateFilename(inputId, errorId, format) {
-    const input = document.getElementById(inputId);
-    const errorDiv = document.getElementById(errorId);
-    let filename = input.value.trim();
-
-    if (!filename) {
-        input.classList.remove('input-error');
-        errorDiv.classList.remove('visible');
-        return true; // Empty is valid (will be handled by required check)
-    }
-
-    // Auto-append extension if not present
-    if (!filename.includes('.')) {
-        filename = filename + '.' + format;
-    }
-
-    try {
-        const response = await fetch(`/api/downloads/check-filename?filename=${encodeURIComponent(filename)}`);
-        const data = await response.json();
-
-        if (data.exists) {
-            input.classList.add('input-error');
-            errorDiv.classList.add('visible');
-            return false;
-        } else {
-            input.classList.remove('input-error');
-            errorDiv.classList.remove('visible');
-            return true;
-        }
-    } catch (error) {
-        console.error('Filename validation error:', error);
-        return true; // Allow on error
-    }
+// Build the noVNC viewer URL. Uses the page's protocol and hostname so it
+// works behind an HTTPS reverse proxy that also terminates TLS for port 6080.
+// Override entirely by setting the VNC_URL env var on the container — the
+// backend emits it as <meta name="vnc-url"> (see app.py's index route) — for
+// setups where noVNC is proxied under a path instead of a port.
+function getVncUrl() {
+    const meta = document.querySelector('meta[name="vnc-url"]');
+    const base = (meta && meta.content) ||
+        `${window.location.protocol}//${window.location.hostname}:6080`;
+    return `${base.replace(/\/$/, '')}/vnc.html?autoconnect=true&resize=scale`;
 }
 
 // Start direct download
@@ -177,8 +153,7 @@ async function startBrowser() {
                 const vncFrame = document.getElementById('vnc-frame');
 
                 // Auto-connect to VNC and hide toolbar
-                const vncUrl = 'http://' + window.location.hostname + ':6080/vnc.html?autoconnect=true&resize=scale';
-                vncFrame.src = vncUrl;
+                vncFrame.src = getVncUrl();
                 vncContainer.classList.add('active');
 
                 // Scroll to VNC viewer
@@ -259,8 +234,7 @@ function handleBrowserStatus(data) {
         const vncContainer = document.getElementById('vnc-container');
         if (!vncContainer.classList.contains('active')) {
             const vncFrame = document.getElementById('vnc-frame');
-            const vncUrl = 'http://' + window.location.hostname + ':6080/vnc.html?autoconnect=true&resize=scale';
-            vncFrame.src = vncUrl;
+            vncFrame.src = getVncUrl();
             vncContainer.classList.add('active');
             setTimeout(() => {
                 vncContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });

@@ -17,7 +17,6 @@ class Scheduler:
     Features:
     - Daily and weekly recurring schedules
     - Auto-resume on stream failures within time windows
-    - Manual stop detection and handling
     - Specific download tracking for multi-stream support
     - Thread-safe schedule management with JSON persistence
     - Lazy disk writes (only when schedules are actually modified)
@@ -32,6 +31,7 @@ class Scheduler:
         self.lock = threading.Lock()
         self._dirty = False  # True when in-memory schedules differ from disk
         self._auto_paused = {}  # browser_id -> [schedule_ids paused for that manual session]
+        self._manual_sessions = set()  # browser_ids of currently registered manual sessions
 
         self.load_schedules()
 
@@ -179,58 +179,6 @@ class Scheduler:
 
             return None
 
-    def move_to_next_slot(self, browser_id):
-        """
-        Move a schedule to its next time slot immediately after user stops download.
-
-        When user manually stops a download, the schedule is reset to 'pending'
-        and moved to the next occurrence (next day for daily, next week for weekly).
-        """
-        if not browser_id.startswith('sched_'):
-            return False
-
-        parts = browser_id.split('_')
-        if len(parts) < 2:
-            return False
-
-        schedule_id = parts[1]
-
-        with self.lock:
-            for schedule in self.schedules:
-                if schedule['id'] == schedule_id:
-                    if schedule.get('active_browser_id') == browser_id:
-                        schedule['status'] = 'pending'
-                        schedule['active_browser_id'] = None
-                        schedule['manual_stop'] = False
-
-                        if schedule.get('daily'):
-                            logger.info(f"Moving daily schedule {schedule_id} to next day")
-                            start_time_str = schedule['start_time']
-                            start_hour, start_min = map(int, start_time_str.split(':'))
-                            tz = self._get_tz(schedule)
-                            now_local = self._now(schedule)
-                            tomorrow = now_local.date() + timedelta(days=1)
-                            if tz:
-                                next_start = datetime.combine(tomorrow, dtime(start_hour, start_min), tzinfo=tz)
-                            else:
-                                next_start = datetime.combine(tomorrow, dtime(start_hour, start_min))
-                            schedule['next_check'] = self._store_dt(next_start)
-                            logger.info(f"Daily schedule {schedule_id} moved to {next_start}")
-                        elif schedule.get('repeat'):
-                            logger.info(f"Moving weekly schedule {schedule_id} to next week")
-                            self._reschedule_next_week(schedule)
-                        else:
-                            logger.info(f"One-time schedule {schedule_id} stopped, marking as completed")
-                            schedule['status'] = 'completed'
-                            self._update_next_check(schedule)
-
-                        self._mark_dirty()
-                        self.save_schedules()
-                        logger.info(f"Schedule {schedule_id} moved to next time slot (browser_id: {browser_id})")
-                        return True
-
-        return False
-
     def pause_schedule(self, schedule_id):
         """Toggle the paused state of a schedule."""
         with self.lock:
@@ -251,32 +199,57 @@ class Scheduler:
         return None
 
     def pause_all_for_manual(self, browser_id):
-        """Mark all active schedules as auto_paused (in memory only — never persisted).
-        Called BEFORE the manual browser starts so the scheduler stops queuing checks."""
+        """Register a manual session and auto-pause all active schedules.
+
+        The auto_paused flag is stripped on load, so it never survives a
+        restart. Also raises the browser service's manual flag so the queue
+        processor drops scheduled launches. Called BEFORE the manual
+        browser/download starts; safe for overlapping sessions.
+        """
         paused_ids = []
         with self.lock:
+            self._manual_sessions.add(browser_id)
             for schedule in self.schedules:
                 if not schedule.get('paused', False) and not schedule.get('auto_paused', False):
                     schedule['auto_paused'] = True
                     paused_ids.append(schedule['id'])
             if paused_ids:
                 self._auto_paused[browser_id] = paused_ids
+        self.browser_service.set_manual_active(True)
         if paused_ids:
             logger.info(f"Auto-paused {len(paused_ids)} schedule(s) for manual session {browser_id}")
 
     def resume_after_manual(self, browser_id):
-        """Lift auto_paused flag for schedules held for a manual session."""
-        ids_to_resume = self._auto_paused.pop(browser_id, [])
-        if not ids_to_resume:
-            return
+        """Release a manual session and resume schedules when the LAST one ends.
+
+        Ownership-checked: an id that never registered (stale Stop/Close on an
+        already-cleaned-up download, sched_ ids) is a no-op, so a stray request
+        can't unlock the scheduler while another manual session is running.
+        """
         with self.lock:
+            if browser_id not in self._manual_sessions:
+                return
+            self._manual_sessions.discard(browser_id)
+            ids_to_resume = self._auto_paused.pop(browser_id, [])
+
+            if self._manual_sessions:
+                # Another manual session is still running — hand this
+                # session's paused schedules to a survivor instead of
+                # resuming them out from under it
+                if ids_to_resume:
+                    survivor = next(iter(self._manual_sessions))
+                    self._auto_paused.setdefault(survivor, []).extend(ids_to_resume)
+                return
+
             for schedule in self.schedules:
                 if schedule['id'] in ids_to_resume and schedule.get('auto_paused'):
                     del schedule['auto_paused']
                     if not schedule.get('paused', False):
                         schedule['status'] = 'pending'
                         self._update_next_check(schedule)
-        logger.info(f"Auto-resumed {len(ids_to_resume)} schedule(s) after manual session {browser_id}")
+
+        self.browser_service.set_manual_active(False)
+        logger.info(f"Manual session {browser_id} ended; auto-resumed {len(ids_to_resume)} schedule(s)")
 
     def get_schedules(self):
         """Get all schedules — active schedules sorted by next_check, paused schedules at the bottom."""
@@ -304,7 +277,6 @@ class Scheduler:
                     continue  # don't disturb paused schedules
                 schedule['status'] = 'pending'
                 schedule['active_browser_id'] = None
-                schedule['manual_stop'] = False
                 schedule['last_check'] = None
                 self._update_next_check(schedule)
                 count += 1
@@ -372,13 +344,13 @@ class Scheduler:
                         end_dt   = self._parse_dt(schedule['end_time'],   tz)
 
                         if now > end_dt:
+                            if self._recording_past_window_end(schedule):
+                                continue
                             if schedule['repeat']:
                                 self._reschedule_next_week(schedule)
                             else:
-                                if schedule['status'] != 'download_started':
-                                    schedule['status'] = 'completed'
+                                schedule['status'] = 'completed'
                                 schedule['active_browser_id'] = None
-                                schedule['manual_stop'] = False
                             continue
 
                         if start_dt <= now <= end_dt:
@@ -432,7 +404,7 @@ class Scheduler:
         Handles:
         - Midnight-spanning windows (e.g., 23:00-01:00)
         - Status transitions (pending -> active -> checking -> download_started)
-        - Auto-resume on download failures (unless manually stopped)
+        - Auto-resume on download failures
         - Proper reset when time window ends
         """
         start_time_str = schedule['start_time']
@@ -499,11 +471,12 @@ class Scheduler:
                     self._update_next_check(schedule)
 
         else:
+            if self._recording_past_window_end(schedule):
+                return
             if schedule['status'] in ['active', 'download_started', 'checking']:
                 schedule['status'] = 'pending'
                 schedule['last_check'] = None
                 schedule['active_browser_id'] = None
-                schedule['manual_stop'] = False
                 self._update_next_check(schedule)
 
     def _update_next_check(self, schedule):
@@ -591,10 +564,15 @@ class Scheduler:
         schedule['end_time'] = new_end.isoformat()
         schedule['status'] = 'pending'
         schedule['active_browser_id'] = None
-        schedule['manual_stop'] = False
 
         self._update_next_check(schedule)
         logger.info(f"Rescheduled {schedule['id']} to next week: {new_start}")
+
+    def _recording_past_window_end(self, schedule):
+        """True while a schedule's recording is still writing after its window
+        ended — the schedule keeps tracking it until FFmpeg exits."""
+        return (schedule['status'] == 'download_started'
+                and self._is_download_active(schedule.get('active_browser_id')))
 
     def _is_download_active(self, browser_id):
         """

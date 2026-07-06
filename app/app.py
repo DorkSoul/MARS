@@ -1,3 +1,4 @@
+import os
 from flask import Flask, render_template
 from app.config import Config
 from app.services import DownloadService, BrowserService
@@ -26,6 +27,18 @@ def create_app():
     scheduler = Scheduler(config, browser_service)
     scheduler.start()
 
+    # Release the manual-session lock when a direct download finishes on its
+    # own (no Stop click), so schedules don't stay auto-paused forever.
+    # Browser-mode sessions resume via the browser close route instead —
+    # the user may still be browsing after the download ends.
+    # resume_after_manual is ownership-checked and refcounted, so this is
+    # safe even with another manual session running.
+    def release_manual_session(browser_id):
+        if browser_id.startswith('direct_'):
+            scheduler.resume_after_manual(browser_id)
+
+    download_service.set_completion_callback(release_manual_session)
+
     # Check Chrome installation at startup
     browser_service.check_chrome_installation()
 
@@ -44,8 +57,9 @@ def create_app():
     # Main route
     @flask_app.route('/')
     def index():
-        """Main page"""
-        return render_template('index.html')
+        """Main page. VNC_URL overrides the noVNC base URL for reverse-proxy
+        setups (emitted as a <meta name="vnc-url"> tag the frontend reads)."""
+        return render_template('index.html', vnc_url=os.getenv('VNC_URL', ''))
 
     # Store services in app context for access if needed
     flask_app.config['browser_service'] = browser_service
